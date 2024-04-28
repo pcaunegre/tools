@@ -24,15 +24,6 @@ import csv
 # TOUS LES VOLS:
 # -------------------------------------
 # https://parapente.ffvl.fr/cfd/liste
-#
-#   ?xml=1
-# import xml.etree.ElementTree as ET
-# tree = ET.parse('/home/pascal/in.xml')
-#  or tree = ET.fromstring(s)
-# for el in root[0][0]:
-# ...   print(el.tag)
-# f1=root[0][0][0]
-# print(f1.attrib)
 
 # TOUS LES VOLS DEPUIS UN SITE:
 # -------------------------------------
@@ -65,11 +56,7 @@ DECONAMES = [0, 'ValLouron', 'St Hilaire', 'St Andre', 'Chalvet W', 'Bleine', 'S
 
 
 SOURCE_URL="https://parapente.ffvl.fr/cfd/liste/saison/"
-
 WTHRMAP_URL="https://www.wetterzentrale.de/reanalysis.php?"
-
-# reanalysis map
-# https://www.wetterzentrale.de/reanalysis.php?jaar=2023&maand=4&dag=7&uur=000&var=1&map=1&model=avn
 
 
 
