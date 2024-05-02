@@ -12,12 +12,12 @@ Arguments:
         7: Pouncho   8: Greoliere  9: Arbas   10: Forclaz 11: Planfait
 
 or
-  -decoId <deco Id>  (as stated in FFVL database)
+  -decoId DECOID  (as stated in FFVL database)
 
-  -an <year>     : year to explore\
-  -minkm <km>    : filter flights by distance\
-  -minfl <n>     : min nbr of flights to consider the day as a good day\
-  -out <outfile> : output file name/path\
+  -an YEAR       : year to explore\
+  -minkm KM      : filter flights by distance\
+  -minfl N       : min nbr of flights to consider the day as a good day\
+  -out OUTFILE   : output file name/path\
   -csv           : generate a csv output file \
   -html          : generate an html output file \
   -pdf           : generate a pdf output file \
