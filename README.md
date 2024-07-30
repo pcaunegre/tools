@@ -3,8 +3,8 @@
 ## extractCFD.py : CFD flights extractor
 
 extractCFD.py : parse CFD data base to extract days of flight\
-extractCFD.py -deco <deco nbr> -an <saeson> [-minkm <min flight dist>] [-minfl <n>]
-                   [-out <file>] [-csv] [-html] [-pdf] [ -h ]
+extractCFD.py -deco DECONBR -an YEAR [-minkm MINKM] [-minfl NBR]
+                   [-out FILE] [-csv] [-html] [-pdf] [ -h ]
 
 Arguments:
 
