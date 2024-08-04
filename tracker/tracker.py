@@ -130,11 +130,6 @@ def parseData(infolist):
         # recording
         PilotsStatus[pseudo] = pilot
 
-#         print(el['pseudo'])
-#         print(el['last_latitude'])
-#         print(el['last_longitude'])
-#         print(el['last_altitude'])
-    
     # save infos ib backup file
     savePilotTable()
     
@@ -277,37 +272,6 @@ def savePilotTable():
         out_file.close()      
     
         
-# -----------------------------------------------
-# table update
-# -----------------------------------------------
-def updatePilotTable():   
-    
-    global PilotsStatus
-    
-    horl = datetime.now()
-    dt_string = horl.strftime("%H:%M:%S")
-    widgets['dateLabel'].configure(text=dt_string)
-
-    now = int(time.time())
-    for p in PilotsStatus:
-        elem=PilotsStatus[p]
-        deltat = now-int(elem['last_postime'])
-        (status,color) = calcStatus(elem)
-        if p in widgets['pilotStat']:
-            # update existing line in the table
-            widgets['pilotStat'][p].sv.set(status)             # change the content of this widget
-            widgets['pilotStat'][p].entry.configure(bg=color)   # change the color of this widget
-            widgets['pilotRTim'][p].sv.set(deltat)
-            widgets['pilotRTim'][p].sv.set(deltat)
-            widgets['pilotAlt'][p].sv.set(elem['last_alt'])
-            widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
-            widgets['pilotDist'][p].sv.set(elem['last_dist'])
-        else:   
-            # add a new line in the table
-            rawnbr = widgets['panel']['rawnb']+1
-            widgets['panel']['rawnb'] = rawnbr
-            addLineInTable(rawnbr, p, elem)
-
         
 # -----------------------------------------------
 # Calculate status
@@ -555,31 +519,30 @@ class Cell(ttk.Entry):
 #         elif self.entry.get('text')=='Undo':
 #             self.entry.configure(text="Clear") 
 
+
 # ------------------------------------------------------------------------------
-# scrollable object to display a table into
+# Create pilots panel
 # ------------------------------------------------------------------------------
-class Tabview(tk.Frame):
-    def __init__(self,parent):
-        super().__init__(parent)
-        self.parent=parent
-        self.canvas = tk.Canvas(self.parent)
-        self.frame = ttk.Frame(self.canvas)
-        self.canvas.create_window(0, 0, anchor='nw', window=self.frame)
-        # ajout des scrollbars
-        vbar = ttk.Scrollbar(self.parent, orient='vertical', command=self.canvas.yview)
-        hbar = ttk.Scrollbar(self.parent, orient='horizontal', command=self.canvas.xview)
-        self.canvas.configure(xscrollcommand=hbar.set,
-                         yscrollcommand=vbar.set,
-                         scrollregion=self.canvas.bbox('all'))
- 
-        self.canvas.grid(row=0, column=0, sticky='eswn')
-        vbar.grid(row=0, column=1, sticky='ns')
-        hbar.grid(row=1, column=0, sticky='ew')
- 
-        self.canvas.bind('<Configure>', self.on_resize)
- 
-    def on_resize(self,event):
-        self.canvas.configure(scrollregion=self.canvas.bbox('all'))
+def createPilotsPanel(nb):   
+    
+    frame=ttk.Frame(nb)
+    frame.pack()
+    nb.add(frame, text="Status pilotes", padding='2mm')
+    Label(frame, relief='groove', font=font_title, bd=1, bg='#d9d98c', text="STATUS PILOTES",width=1000).pack(side='top', padx=2, pady=2)
+    
+    dateLabel=Label(frame, font=font_def, bd=1, text=dt_string)
+    dateLabel.pack(side='top')
+    widgets['dateLabel']=dateLabel
+
+    canv = Canvas(frame, width=600, height=300, scrollregion=(0, 0, 600, 1200))
+    canv.pack(side='left',fill='both', expand=1)
+
+    sb = Scrollbar(frame,orient='vertical', width=20, command=canv.yview)
+    sb.pack(side='right',fill='y')
+
+    canv.configure(yscrollcommand=sb.set)
+    
+    createPilotTable(canv)
     
 
 # ------------------------------------------------------------------------------
@@ -588,64 +551,14 @@ class Tabview(tk.Frame):
 # ------------------------------------------------------------------------------
 # Create pilots panel
 # ------------------------------------------------------------------------------
-def createPilotsPanel(nb):   
-    
-    global objcan
-    frame=ttk.Frame(nb)
-#     frame.pack()
-    frame.grid(row=0, column=0, sticky='n')
-    handle=nb.add(frame, text="Status pilotes", padding='2mm')
-#     Label(frame, relief='groove', font=font_title, bd=1, bg='#d9d98c', text="STATUS PILOTES",\
-#             width=1000).pack(side='top', padx=2, pady=2)
-    Label(frame, relief='groove', font=font_title, bd=1, bg='#d9d98c', text="STATUS PILOTES",\
-            width=1000).grid(row=1, column=0, sticky='n')
-    
-    dateLabel=Label(frame, font=font_def, bd=1, text=dt_string)
-#     dateLabel.pack(side='top')
-    dateLabel.grid(row=2, column=0, sticky='n')
-    widgets['dateLabel']=dateLabel
-    
-    pilottabframe=Tabview(frame)
-    pilottabframe.grid(row=3, column=0, sticky='n')
-#     canv = Canvas(frame, width=600, height=300, scrollregion=(0, 0, 600, 1200))
-#     pilottabframe=tk.Frame(canv)
-#     canv.create_window(0, 0, anchor='nw', window=pilottabframe)
-#     vbar = Scrollbar(frame,orient='vertical', width=10, command=canv.yview)
-#     hbar = Scrollbar(frame,orient='horizontal', width=10, command=canv.xview)
-#     canv.configure(xscrollcommand=hbar.set,
-#                          yscrollcommand=vbar.set,
-#                          scrollregion=canv.bbox('all'))
-# 
-#     canv.grid(row=0, column=0, sticky='eswn')
-#     vbar.grid(row=0, column=1, sticky='ns')
-#     hbar.grid(row=1, column=0, sticky='ew')
-#  
-#     canv.bind('<Configure>', on_resize)
-#     objcan=canv
-
-#     canv.pack(side='left',fill='both', expand=1)
-# 
-#     vb.pack(side='right',fill='y')
-#     canv.configure(yscrollcommand=vb.set)
-    
-# # #     createPilotTable(pilottabframe)    
-
-#     createPilotTable(canv)
-
-
-# -----------------------------------------------
-# Create pilots table
-# -----------------------------------------------
-# def createPilotTable(parent):   
-def createPilotTable(pilottabframe):   
+def createPilotTable(parent):   
     
     global PilotsStatus
     
-#     # first create a scrollable container
-#     pilottabframe=tk.Frame(parent)
-#     widgets['panel']['pilot'] = pilottabframe
-#     parent.create_window((0,0), window=pilottabframe, anchor='nw')    
-
+    # first create a scrollable container
+    pilottabframe=tk.Frame(parent)
+    parent.create_window((0,0), window=pilottabframe, anchor='nw')    
+    widgets['panel']['pilot'] = pilottabframe
 
     # header creation
     colInd=0
@@ -654,40 +567,72 @@ def createPilotTable(pilottabframe):
         Cell(pilottabframe,x=colInd,y=0, w=width, defval=header, options=optionsH)   
         colInd+=1
     
+    now = int(time.time())
     # table body
-    rawnbr=0
+    # table body
+    rownbr=0
     for p in PilotsStatus:
-        rawnbr+=1
+        rownbr+=1
         elem=PilotsStatus[p]
-        addLineInTable(rawnbr, p, elem)
+        addLineInTable(rownbr, p, elem)
+    widgets['panel']['rownb'] = rownbr    
 
-    widgets['panel']['rawnb'] = rawnbr
-    widgets['panel']['pilot'] = pilottabframe
     
 # -----------------------------------------------
 # Create pilots table
 # -----------------------------------------------
-def addLineInTable(rawnbr, p, elem):   
+def addLineInTable(rownbr, p, elem):   
     
     f = widgets['panel']['pilot']
     now = int(time.time())
     deltat = now-int(elem['last_postime'])
     (status,color) = calcStatus(elem)
-    Cell(f, x=0,y=rawnbr, w=30, defval=p,               options=optionsC, bgc=defaultbg) 
-    Cell(f, x=1,y=rawnbr, w=20, defval=elem['Name'],    options=optionsC, bgc=defaultbg ) 
-    Cell(f, x=2,y=rawnbr, w=20, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
-    c=Cell(f, x=3,y=rawnbr, w=10, defval=elem['last_alt'], options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=0,y=rownbr, w=30, defval=p,               options=optionsC, bgc=defaultbg) 
+    Cell(f, x=1,y=rownbr, w=20, defval=elem['Name'],    options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=2,y=rownbr, w=20, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=3,y=rownbr, w=10, defval=elem['last_alt'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotAlt'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=4,y=rawnbr, w=10, defval=elem['last_h_speed'], options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=4,y=rownbr, w=10, defval=elem['last_h_speed'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotHs'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=5,y=rawnbr, w=10, defval=elem['last_dist'], options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=5,y=rownbr, w=10, defval=elem['last_dist'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotDist'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=6,y=rawnbr, w=15, defval=status,        options=optionsC, bgc=color ) 
+    c=Cell(f, x=6,y=rownbr, w=15, defval=status,        options=optionsC, bgc=color ) 
     widgets['pilotStat'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=7,y=rawnbr, w=15, defval=deltat,        options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=7,y=rownbr, w=15, defval=deltat,        options=optionsC, bgc=defaultbg ) 
     widgets['pilotRTim'][p]=c
-    Cell(f, x=8,y=rawnbr, w=15, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=8,y=rownbr, w=15, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
+
+# -----------------------------------------------
+# table update
+# -----------------------------------------------
+def updatePilotTable():   
     
+    global PilotsStatus
+    
+    horl = datetime.now()
+    dt_string = horl.strftime("%H:%M:%S")
+    widgets['dateLabel'].configure(text=dt_string)
+
+    now = int(time.time())
+    for p in PilotsStatus:
+        elem=PilotsStatus[p]
+        deltat = now-int(elem['last_postime'])
+        (status,color) = calcStatus(elem)
+        if p in widgets['pilotStat']:
+            # update existing line in the table
+            widgets['pilotStat'][p].sv.set(status)             # change the content of this widget
+            widgets['pilotStat'][p].entry.configure(bg=color)   # change the color of this widget
+            widgets['pilotRTim'][p].sv.set(deltat)
+            widgets['pilotRTim'][p].sv.set(deltat)
+            widgets['pilotAlt'][p].sv.set(elem['last_alt'])
+            widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
+            widgets['pilotDist'][p].sv.set(elem['last_dist'])
+        else:   
+            # add a new line in the table
+            rownbr = widgets['panel']['rownb']+1
+            widgets['panel']['rownb'] = rownbr
+            addLineInTable(rownbr, p, elem)
+
         
 # ------------------------------------------------------------------------------
 # OPTIONS PANEL
@@ -762,6 +707,83 @@ def createParametersPanel(nb):
 
 #TBR: saving of file, distance infos
  
+
+# -----------------------------------------------
+# Create parameters table
+# -----------------------------------------------
+def createParamsTable(parent):
+    
+    global params
+    # get config and last stored values
+    config = readParameterConfig()
+    # no more needed params = loadParams()
+    widgets['prevParams']=params    # store current parameters 
+    
+    # store this object for future destroy/refresh
+    widgets['paramsparentframe']=parent
+    
+    # first create a container
+    paramstabframe=tk.Frame(parent)
+    parent.create_window((0,0), window=paramstabframe, anchor='nw')    
+
+    # Table headers creation
+    Cell(paramstabframe,x=0, y=0, w=15, options=optionsH, defval='Parametre')   
+    Cell(paramstabframe,x=1, y=0, w=30, options=optionsH, defval='Valeur')   
+    Cell(paramstabframe,x=2, y=0, w=100, options=optionsH, defval='Description')   
+
+    options={'height': 2}
+
+    # Table body creation
+    rownbrr=1
+    for elem in config['parameters']:
+        name=elem['name']
+        Cell(paramstabframe,x=0,y=rownbrr,defval=name, w=15, options={'height': 2} )            # Id column
+        
+        value=""
+        if 'def' in elem:
+            value=elem['def']
+            descrip = elem['descr'] + " (def. " + str(value) + ")"
+        else:
+            descrip = elem['descr']
+            
+        if name in params:
+            value=params[name]
+                
+        typ=elem['type']
+        met=elem['method']
+        options={}
+        if met=='scale':
+            options={'length': 270}
+            options['from_']=elem['from']
+            options['to']=elem['to']
+            options['resolution']=elem['res']
+            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, w=30, wtype='scale', options=options) # Status column
+            widgets['paramTab'][name]=c.entry
+       
+        elif met=='radio':
+            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, togvals=elem['list'], w=30, wtype='radio', options=options) # Status column
+            widgets['paramTab'][name]=c.sv   # 
+        
+        elif met=='entry':
+            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, w=30, wtype='ent', options=options) 
+            widgets['paramTab'][name]=c.sv   # 
+
+        elif met=='label':
+            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, w=30, wtype='lab', options=options) 
+            widgets['paramTab'][name]=c.sv   # 
+
+        elif wtype=="tog":
+            # making a toggle button in the cell
+            self.vallist = togvals.copy()
+            self.vallist.append(togvals.pop(0))
+            self.sv = tk.StringVar()
+            self.sv.set(defval)
+            self.entry = tk.Button(self.master, textvariable=self.sv, command=self.OnClick, width=17, text=defval, padx=0, pady=1.5)   #bg="red", fg="blue",
+        
+        Cell(paramstabframe,x=2,y=rownbrr,defval=descrip, options={'font': font_def, 'anchor': 'w'}, w=100) # Descr column
+        rownbrr+=1
+
+
 # -----------------------------------------------
 # utility for spot selection
 # -----------------------------------------------
@@ -809,83 +831,6 @@ def getCoord(spot):
         if elem['name']==spot:
             return(elem)
 
-# -----------------------------------------------
-# Create parameters table
-# -----------------------------------------------
-def createParamsTable(parent):
-    
-    global params
-    # get config and last stored values
-    config = readParameterConfig()
-    # no more needed params = loadParams()
-    widgets['prevParams']=params    # store current parameters 
-    
-    # store this object for future destroy/refresh
-    widgets['paramsparentframe']=parent
-    
-    # first create a container
-    paramstabframe=tk.Frame(parent)
-    parent.create_window((0,0), window=paramstabframe, anchor='nw')    
-
-    # Table headers creation
-    Cell(paramstabframe,x=0, y=0, w=15, options=optionsH, defval='Parametre')   
-    Cell(paramstabframe,x=1, y=0, w=30, options=optionsH, defval='Valeur')   
-    Cell(paramstabframe,x=2, y=0, w=100, options=optionsH, defval='Description')   
-
-    options={'height': 2}
-
-    # Table body creation
-    rawnbr=1
-    for elem in config['parameters']:
-        name=elem['name']
-        Cell(paramstabframe,x=0,y=rawnbr,defval=name, w=15, options={'height': 2} )            # Id column
-        
-        value=""
-        if 'def' in elem:
-            value=elem['def']
-            descrip = elem['descr'] + " (def. " + str(value) + ")"
-        else:
-            descrip = elem['descr']
-            
-        if name in params:
-            value=params[name]
-                
-        typ=elem['type']
-        met=elem['method']
-        options={}
-        if met=='scale':
-            options={'length': 270}
-            options['from_']=elem['from']
-            options['to']=elem['to']
-            options['resolution']=elem['res']
-            c=Cell(paramstabframe,x=1,y=rawnbr,defval=value, w=30, wtype='scale', options=options) # Status column
-            widgets['paramTab'][name]=c.entry
-       
-        elif met=='radio':
-            c=Cell(paramstabframe,x=1,y=rawnbr,defval=value, togvals=elem['list'], w=30, wtype='radio', options=options) # Status column
-            widgets['paramTab'][name]=c.sv   # 
-        
-        elif met=='entry':
-            c=Cell(paramstabframe,x=1,y=rawnbr,defval=value, w=30, wtype='ent', options=options) 
-            widgets['paramTab'][name]=c.sv   # 
-
-        elif met=='label':
-            c=Cell(paramstabframe,x=1,y=rawnbr,defval=value, w=30, wtype='lab', options=options) 
-            widgets['paramTab'][name]=c.sv   # 
-
-        elif wtype=="tog":
-            # making a toggle button in the cell
-            self.vallist = togvals.copy()
-            self.vallist.append(togvals.pop(0))
-            self.sv = tk.StringVar()
-            self.sv.set(defval)
-            self.entry = tk.Button(self.master, textvariable=self.sv, command=self.OnClick, width=17, text=defval, padx=0, pady=1.5)   #bg="red", fg="blue",
-        
-        Cell(paramstabframe,x=2,y=rawnbr,defval=descrip, options={'font': font_def, 'anchor': 'w'}, w=100) # Descr column
-        rawnbr+=1
-
-
-
 
 
 
@@ -901,9 +846,9 @@ def getgeom(W):
     print("Geom")
     print("The width of Tkinter window:", root.winfo_width())
     print("The height of Tkinter window:", root.winfo_height())     
-    print("Screen")
-    print("The width of Tkinter window:", root.winfo_screenwidth())
-    print("The height of Tkinter window:", root.winfo_screenheight())     
+#     print("Screen")
+#     print("The width of Tkinter window:", root.winfo_screenwidth())
+#     print("The height of Tkinter window:", root.winfo_screenheight())     
     
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
@@ -921,23 +866,9 @@ PILOTS_FILE     = "select a file"
 
 
 # init
-# geometry="1024x600"
-geometry="1350x700"
 dt_string = datetime.now().strftime("%H:%M:%S")
 
-session = HTMLSession()
-
-
-# cont = 1
-# while(cont):
-#     infolist = fetchDatabase()
-#     if infolist is None: 
-#         print("fetch is void")    
-#     else:
-#         parseData(infolist)
-#     print("------------------------------------------------------------")
-#     time.sleep(REFRESH_PERIOD)
-
+geometry="1400x700"
 root = tk.Tk()
 root.title("Race Tracker")
 root.geometry(geometry)
@@ -974,6 +905,8 @@ widgets['saveButtonParam'] = {}
 widgets['paramTab'] = {}
 widgets['filesel'] = {}
 widgets['strvar'] = {}
+
+session = HTMLSession()
 
 loadParams()
 print("current params")
