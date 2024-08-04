@@ -42,11 +42,11 @@ def loadPilotList():
     global PILOT_FILTER, params
     PILOT_FILTER = {}
     if params['Filtrage'] != 'Fichier':
-        print("not using pilot list to filter")
+        print("not using pilot list to filter",file=logfile, flush=True)
         return()
         
     if PILOTS_FILE=='' or PILOTS_FILE=='select a file' or not os.path.isfile(PILOTS_FILE):
-        print("pilot list undefined or missing")
+        print("pilot list undefined or missing",file=logfile, flush=True)
         return()
     
     with open(PILOTS_FILE, newline='') as csvfile:
@@ -55,7 +55,7 @@ def loadPilotList():
             PILOT_FILTER[row['Pseudo']]={ "Name": row['Prenom'], "Surname": row['Nom']}
         csvfile.close()
     
-    print(PILOT_FILTER)
+    print(PILOT_FILTER,file=logfile, flush=True)
 
 
 
@@ -66,11 +66,11 @@ def fetchDatabase():
     
     now = int(time.time()-60); # take position from last minute 
     url =FFVL_URL+str(now)
-#     print("URL=%s" % url)
+#     print("URL=%s" % url,file=logfile, flush=True)
     try:
         ret = session.get(url)
     except:
-        print('Request failure')
+        print('Request failure',file=logfile, flush=True)
         return('')
     htmlContent = ret.content.decode('utf-8')
     
@@ -100,32 +100,40 @@ def parseData(infolist):
         if params['Filtrage'] == 'Fichier':
             # is this pilot in list ?
             if not (pseudo in PILOT_FILTER): 
-                print("%s not in my list" % pseudo)
+                print("%s not in my list" % pseudo,file=logfile, flush=True)
                 continue
         
         elif params['Filtrage'] == 'Distance':
             # is this pilot close enough ?
             if isPilotTooFar(el): 
-                print("%s pilot too far" % pseudo)
                 continue
             
         # create new item if needed
         if pseudo not in PilotsStatus: 
             name='-'; surname='-'
             # infos coming from filter file
+            print("==  ITEM  NEW===============================",file=logfile, flush=True)
+            print(el,file=logfile, flush=True)
             if pseudo in PILOT_FILTER:
                 name = PILOT_FILTER[pseudo]['Name']
                 surname = PILOT_FILTER[pseudo]['Surname']
+            if 'last_h_speed' in el:
+                speed = int(el['last_h_speed'])
+            else:
+                speed = '-'
             pilot = { "Name": name, "Surname": surname, "Cleared": 0, "Landed": 0, "TakeOff": 0,\
-                "last_alt": 0, "last_h_speed": "-", "last_lat": 0, "last_lon": 0, "last_dist": 0, "last_postime": 0, "new": 1}
+                "last_alt": int(el['last_altitude']), "last_lat": el['last_latitude'], \
+                "last_lon": el['last_longitude'], "last_dist": 0, "last_h_speed": speed,\
+                "last_postime": el['last_position_utc_timestamp_unix'], "new": 1}
+        
         else:
             pilot = PilotsStatus[pseudo]
         
-        # evaluate status of this pilot
-        print("==  ITEM  ==================================")
-        print(el)
-        (pilot,al) = checkPilot(pilot,el)
-        alarm += al
+            # evaluate status of this pilot
+            print("==  ITEM  ==================================",file=logfile, flush=True)
+            print(el,file=logfile, flush=True)
+            (pilot,al) = checkPilot(pilot,el)
+            alarm += al
         
         # recording
         PilotsStatus[pseudo] = pilot
@@ -151,54 +159,52 @@ def checkPilot(ps,cur):
     
     tof = 0; lan = 0; alarm = 0
     # rough distance calculation (in meter) from gps dec coord and altitude    
-    distm = int(1000*calcDist(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
-        cur['last_latitude'], cur['last_longitude'], cur['last_altitude']))
-    print("Distance= %d m" % distm)
+    distm = calcDist(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
+        cur['last_latitude'], cur['last_longitude'], cur['last_altitude'])
+    print("Distance= %d m" % distm,file=logfile, flush=True)
     
     deltaTime=int(cur['last_position_utc_timestamp_unix'])-int(ps['last_postime'])
-    print("DeltaT= %d s" % deltaTime)
+    print("DeltaT= %d s" % deltaTime,file=logfile, flush=True)
 
     if ps['new']:            
         #first log, do not check.
         ps.update({"new": 0})
+        print("first log, skip check",file=logfile, flush=True)
     else:   
-        # if speed is sent by device, use speed
-        if 'last_h_speed' in cur:
-            
-            last_h_speed = int(cur['last_h_speed'])
-            ps.update({"last_h_speed": last_h_speed})
-            print("Speed= %d km/h" % last_h_speed)
-            # detect takeoff: speed of 10km/h
-            if ps['TakeOff']==0:
-                if (last_h_speed > int(params['VitMinDeco'])): tof = 1
-            
-            # last_h_speed not reliable to detect landing (shows 0 unexpectidly)
-#             else:
-#                 if (last_h_speed < 5):  lan = 1
-        
-        
-        # otherwise use distance from last record
+        if deltaTime==0:
+            print("log not new, skip check",file=logfile, flush=True)
         else:
-            
+            # if speed is sent by device, use speed
+            if 'last_h_speed' in cur:
+                
+                last_h_speed = int(cur['last_h_speed'])
+                ps.update({"last_h_speed": last_h_speed})
+                print("Speed= %d km/h" % last_h_speed,file=logfile, flush=True)
+                # detect takeoff: speed of 10km/h
+                if ps['TakeOff']==0:
+                    if (last_h_speed > int(params['VitMinDeco'])): tof = 1
+                        
+            # in addition use distance from last record
             # detect takeoff: move of 10m
             if ps['TakeOff']==0:
                 if (distm > int(params['DistMinDeco'])): tof = 1
             
             else:
                 if (distm < int(params['DistMaxPose'])):  lan = 1
-        
-        if tof:
-            ps.update({'TakeOff': 1})
-            print("Pilot %s takeoff V" % cur['pseudo'])
-         
-        if lan:
-            ps.update({'Landed': 1})
-            print("Pilot %s landed" % cur['pseudo'])
+            
+            
+            if tof:
+                ps.update({'TakeOff': 1})
+                print("Pilot %s takeoff V" % cur['pseudo'],file=logfile, flush=True)
+             
+            if lan:
+                ps.update({'Landed': 1})
+                print("Pilot %s landed" % cur['pseudo'],file=logfile, flush=True)
 
-        # pilot landed but not cleared
-        if (ps['Landed'] and ps['Cleared']==0):
-            print("ALARM ! Pilot %s" % cur['pseudo'])
-            alarm = 1
+            # pilot landed but not cleared
+            if (ps['Landed'] and ps['Cleared']==0):
+                print("ALARM ! Pilot %s" % cur['pseudo'],file=logfile, flush=True)
+                alarm = 1
         
 
     ps.update({  "last_lat": cur['last_latitude'],\
@@ -214,13 +220,14 @@ def checkPilot(ps,cur):
 def isPilotTooFar(elem):
    
     global params
-    lon=widgets['strvar']['Longitude'].get()
     lat=widgets['strvar']['Latitude'].get()
-    alt=widgets['strvar']['ALtitude'].get()
+    lon=widgets['strvar']['Longitude'].get()
+    alt=widgets['strvar']['Altitude'].get()
     if len(lon) and len(lat) and len(alt):
-        dist = calcDist(lat, lon, alt, elem['last_latitude'],\
-            elem['last_latitude'],elem['last_altitude'])
-        if dist > params['MaxDistance']:
+        distkm = 0.001*calcDist(lat, lon, alt, elem['last_latitude'],\
+            elem['last_longitude'],elem['last_altitude'])
+        if distkm > float(params['MaxDistance']):
+            print("%s pilot too far %d" % (elem['pseudo'], int(distkm)),file=logfile, flush=True)
             return(1)
         else:
             return(0)
@@ -232,17 +239,18 @@ def isPilotTooFar(elem):
 # -----------------------------------------------
 # distance calc between 2 gps coordonates
 # in decimal degrees and z in meter
-# return in km
+# return in m
 # -----------------------------------------------
 def calcDist(x1,y1,z1,x2,y2,z2):
 
     k1 = 111000           # 1 deg is roughly 111km
-    k2 = 111000*cos(x1)   # 1 deg is roughly 111km at equator
+    k2 =  77000           # 1 deg is roughly 111km at equator
+#     k2 = 111000*cos(6.3*float(x1)/360)   # 1 deg is roughly 111km at equator
     dist= sqrt(\
-        ((int(x1)-int(x2))*k1)**2 +\
-        ((int(y1)-int(y2))*k2)**2 +\
-         (int(z1)-int(z2))**2 )/1000
-    return(dist)
+        ((float(x1)-float(x2))*k1)**2 +\
+        ((float(y1)-float(y2))*k2)**2 +\
+         (float(z1)-float(z2))**2 )
+    return(int(dist))
   
 # -----------------------------------------------
 # load pilot table from backup file
@@ -308,7 +316,19 @@ def clearPilotStatus(p):
     PilotsStatus[p]=elem
     updatePilotTable()
         
-        
+# -----------------------------------------------
+# locate pilot on map
+# -----------------------------------------------
+def locatePilot(p):   
+    
+    global PilotsStatus
+    lat = PilotsStatus[p]['last_lat']
+    lon = PilotsStatus[p]['last_lon']
+    url = "https://www.spotair.mobi/?lat="+str(lat)+"&lng="+str(lon)+"&zoom=15"
+    command = 'firefox  --new-window \"'+url+'\"'
+    print(command,file=logfile, flush=True)    
+    os.system(command)
+    
 # ----------------------------------------------------------
 #
 # proc readParameterConfig
@@ -374,6 +394,7 @@ def saveParam():
     for el in widgets['paramTab']:
         params[el]=widgets['paramTab'][el].get()  # extract value from object
     
+    
     writeParams(params)
     widgets['saveButtonParam'].configure(bg=defaultbg)
 
@@ -383,11 +404,11 @@ def saveParam():
 # -----------------------------------------------
 def fetchAndParse():
 
-    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",file=logfile, flush=True)
     # begin to grab info
     infolist = fetchDatabase()
     if infolist is None: 
-        print("fetch is void")    
+        print("fetch is void",file=logfile, flush=True)    
     else:
         # filter and parse data
         parseData(infolist)
@@ -405,8 +426,8 @@ def processStart():
     #2. load the pilot status (if any) in case of restart after a crash
     loadPilotTable()
         
-    #3. begin to grab info
-    fetchAndParse()    
+#     #3. begin to grab info
+#     fetchAndParse()    
     
     #4. create pilot table and open panel
     createPilotsPanel(nb)
@@ -424,7 +445,17 @@ def generalUpdater():
     updatePilotTable()
     root.after(REFRESH_PERIOD*1000,generalUpdater)
     
+# -----------------------------------------------
+# reset pilot status file
+# -----------------------------------------------
+def resetPilotStatus ():
     
+    global PilotsStatus
+    PilotsStatus = {}
+    savePilotTable()  
+    
+    
+       
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
 # GUI functions
@@ -493,10 +524,17 @@ class Cell(ttk.Entry):
             # making a single push button in the cell
              self.entry = tk.Button(self.master, command=self.OnPush, width=w, text=defval , padx=1, pady=1, bd=1)   #bg="red", fg="blue",
         
+        elif wtype=="locb":
+            # making a single push button in the cell
+             self.entry = tk.Button(self.master, command=self.Locate, width=w, text=defval , padx=1, pady=1, bd=1)   #bg="red", fg="blue",
+
         self.entry.grid(column=self.x, row=self.y, padx=1, pady=1)
 
     def OnPush(self):
         clearPilotStatus(self.pid)
+        
+    def Locate(self):
+        locatePilot(self.pid)
         
     def ValueChanged(self,newval=''):
         widgets['saveButtonParam'].configure(bg='Yellow')        
@@ -563,12 +601,10 @@ def createPilotTable(parent):
     # header creation
     colInd=0
     for (header,width) in [['Pseudo',30], ['Prenom',20], ['Nom',20], ['ALT',10], \
-            ['VitH',10], ['Dist',10],['Status',15], ['Dernier log',15], ['Clear',15]]:
+            ['VitH',7], ['Dist',10],['Status',15], ['Dernier log',10], ['Clear',10], ['Loc',10]]:
         Cell(pilottabframe,x=colInd,y=0, w=width, defval=header, options=optionsH)   
         colInd+=1
     
-    now = int(time.time())
-    # table body
     # table body
     rownbr=0
     for p in PilotsStatus:
@@ -592,15 +628,16 @@ def addLineInTable(rownbr, p, elem):
     Cell(f, x=2,y=rownbr, w=20, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
     c=Cell(f, x=3,y=rownbr, w=10, defval=elem['last_alt'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotAlt'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=4,y=rownbr, w=10, defval=elem['last_h_speed'], options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=4,y=rownbr, w=7, defval=elem['last_h_speed'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotHs'][p]=c   # keep an handle to change the status later
     c=Cell(f, x=5,y=rownbr, w=10, defval=elem['last_dist'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotDist'][p]=c   # keep an handle to change the status later
     c=Cell(f, x=6,y=rownbr, w=15, defval=status,        options=optionsC, bgc=color ) 
     widgets['pilotStat'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=7,y=rownbr, w=15, defval=deltat,        options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=7,y=rownbr, w=10, defval=deltat,        options=optionsC, bgc=defaultbg ) 
     widgets['pilotRTim'][p]=c
-    Cell(f, x=8,y=rownbr, w=15, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=8,y=rownbr, w=10, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=9,y=rownbr, w=10, wtype="locb",defval="Voir",pid=p, options=optionsC, bgc=defaultbg ) 
 
 # -----------------------------------------------
 # table update
@@ -642,16 +679,18 @@ def updatePilotTable():
 # -----------------------------------------------
 def createParametersPanel(nb):   
     
-    global PILOTS_FILE
+    global PILOTS_FILE, params
     frame=ttk.Frame(nb)
     frame.pack()
     nb.add(frame, text="Parametres", padding='2mm')
     
-    # - start button section
+    # - start and reset buttons section
     buttonframe=tk.Frame(frame, relief='raised', height=10)
     buttonframe.pack(side='top',fill='both', expand=0)
     sb=Button(buttonframe, bd=3, highlightcolor='yellow',text="START !",height=1,width=20, command=processStart)
     sb.pack(side='left')
+    rb=Button(buttonframe, bd=3, highlightcolor='yellow',text="Reset",height=1,width=20, command=resetPilotStatus)
+    rb.pack(side='left')
     Label(frame, relief='groove', bd=0).pack(side='top')        # spacer
     
     # - file section
@@ -661,8 +700,11 @@ def createParametersPanel(nb):
     fileframe.pack(side='top',fill='both', expand=0)
     Label(fileframe, relief='flat', bd=1, text="Fichier pilote",width=15).pack(side='left')
     sv = tk.StringVar()
+    if 'pilotfile' in params: PILOTS_FILE=params['pilotfile']
     sv.set(PILOTS_FILE)
     widgets['filesel']=sv
+    widgets['paramTab']['pilotfile']=sv
+    if 'pilotfile' in params: PILOTS_FILE=params['pilotfile']
     l=Label(fileframe, relief='sunken', bd=1, font=font_ital, textvariable=sv,width=80)
     l.pack(side='left')
     widgets['filelab']=l
@@ -677,8 +719,10 @@ def createParametersPanel(nb):
     menuframe.pack(side='top',fill='both', expand=0)
     Label(menuframe, relief='flat', bd=1, text="Spot",width=15).grid(column=1, row=1, padx=1, pady=1)
     spotlist = getSpotList()
-    widgets['strvar']['ld']=tk.StringVar()
+    widgets['strvar']['ld'] = tk.StringVar()
     widgets['strvar']['ld'].set(spotlist[0])
+    if 'spot' in params: widgets['strvar']['ld'].set(params['spot'])
+    widgets['paramTab']['spot'] = widgets['strvar']['ld']
     landsel = OptionMenu(menuframe, widgets['strvar']['ld'], *spotlist, command=updSpotEntry)
     landsel.config(width=25)    
     landsel.grid(column=2, row=1, padx=1, pady=1)
@@ -686,8 +730,10 @@ def createParametersPanel(nb):
     for item in ['Latitude', 'Longitude', 'Altitude']:
         rwnbr+=1
         widgets['strvar'][item] = tk.StringVar()
+        widgets['paramTab'][item] = widgets['strvar'][item]
         Label(menuframe, relief='flat', bd=1, text=item,width=15).grid(column=1, row=rwnbr, padx=1, pady=1)
         ttk.Entry(menuframe, textvariable=widgets['strvar'][item], width=30).grid(column=2, row=rwnbr, padx=1, pady=1) 
+        if item in params: widgets['strvar'][item].set(params[item])
     
     # - options section
     Label(frame, relief='groove', font=font_subtitle, bd=1, bg='#d9d98c',anchor='w', text="Options",width=1000).pack(side='top')
@@ -861,8 +907,11 @@ def getgeom(W):
 execpath=os.path.dirname(sys.argv[0])
 paramconfigfile = execpath+"/.config"
 paramstatusfile = os.environ['HOME']+"/.tracker.options"
+logfile         = os.environ['HOME']+"/.tracker.log"
 PILOTS_STATUS   = os.environ['HOME']+"/.tracker.pilots"
 PILOTS_FILE     = "select a file"
+
+logfile = open(logfile,'w')
 
 
 # init
@@ -909,10 +958,10 @@ widgets['strvar'] = {}
 session = HTMLSession()
 
 loadParams()
-print("current params")
-print(params)
+print("current params",file=logfile, flush=True)
+print(params,file=logfile, flush=True)
 createParametersPanel(nb)
-# createPilotsPanel(nb)
+
 root.update()
 
 # Start recurrent process
