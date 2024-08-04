@@ -31,8 +31,8 @@ import tkinter.font as tkFont
 
 
 FFVL_URL="https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp="
-# REFRESH_PERIOD = 60
-REFRESH_PERIOD = 10
+REFRESH_PERIOD = 60
+# REFRESH_PERIOD = 10
 
 # ------------------------------------------------------------------------------
 # load pilot list from input csv file
@@ -67,7 +67,11 @@ def fetchDatabase():
     now = int(time.time()-60); # take position from last minute 
     url =FFVL_URL+str(now)
 #     print("URL=%s" % url)
-    ret = session.get(url)
+    try:
+        ret = session.get(url)
+    except:
+        print('Request failure')
+        return('')
     htmlContent = ret.content.decode('utf-8')
     
     #----debug
@@ -86,39 +90,50 @@ def fetchDatabase():
 # ------------------------------------------------------------------------------
 def parseData(infolist):
     
-    global PilotsStatus, params
+    global PilotsStatus, params, PILOT_FILTER
     alarm = 0
     for elem in infolist:
         el = infolist[elem]
         pseudo=el['pseudo']
-        ###TBR
-        
+
+        # filtering
         if params['Filtrage'] == 'Fichier':
             # is this pilot in list ?
-            if not (pseudo in PILOT_FILTER): continue
+            if not (pseudo in PILOT_FILTER): 
+                print("%s not in my list" % pseudo)
+                continue
         
         elif params['Filtrage'] == 'Distance':
             # is this pilot close enough ?
-            if isPilotTooFar(el): continue
+            if isPilotTooFar(el): 
+                print("%s pilot too far" % pseudo)
+                continue
             
-        
-        
+        # create new item if needed
         if pseudo not in PilotsStatus: 
-            # print("%s not in my list" % pseudo)
-            continue
-        
-        (pilot,al) = PilotsStatus[pseudo]
-        alarm += al
+            name='-'; surname='-'
+            # infos coming from filter file
+            if pseudo in PILOT_FILTER:
+                name = PILOT_FILTER[pseudo]['Name']
+                surname = PILOT_FILTER[pseudo]['Surname']
+            pilot = { "Name": name, "Surname": surname, "Cleared": 0, "Landed": 0, "TakeOff": 0,\
+                "last_alt": 0, "last_h_speed": "-", "last_lat": 0, "last_lon": 0, "last_dist": 0, "last_postime": 0, "new": 1}
+        else:
+            pilot = PilotsStatus[pseudo]
         
         # evaluate status of this pilot
-        pilot = checkPilot(pilot,el)
+        print("==  ITEM  ==================================")
+        print(el)
+        (pilot,al) = checkPilot(pilot,el)
+        alarm += al
         
+        # recording
         PilotsStatus[pseudo] = pilot
 
-        print(el['pseudo'])
-        print(el['last_latitude'])
-        print(el['last_longitude'])
-        print(el['last_altitude'])
+#         print(el['pseudo'])
+#         print(el['last_latitude'])
+#         print(el['last_longitude'])
+#         print(el['last_altitude'])
     
     # save infos ib backup file
     savePilotTable()
@@ -140,58 +155,61 @@ def parseData(infolist):
 def checkPilot(ps,cur):
     
     tof = 0; lan = 0; alarm = 0
-    # rough distance calculation (in meter) from gps dec coord and altitude
-    dist =  sqrt(((ps['last_lat']-cur['last_latitude'])*100000)**2+ \
-            ((ps['last_lon']-cur['last_longitude'])*100000)**2+ \
-            (ps['last_alt']-cur['last_altitude'])**2)
-    print("--------------")
-    print("Distance= %d m" % int(dist))
+    # rough distance calculation (in meter) from gps dec coord and altitude    
+    distm = int(1000*calcDist(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
+        cur['last_latitude'], cur['last_longitude'], cur['last_altitude']))
+    print("Distance= %d m" % distm)
     
     deltaTime=int(cur['last_position_utc_timestamp_unix'])-int(ps['last_postime'])
     print("DeltaT= %d s" % deltaTime)
-            
-    # if speed is sent by device, use speed
-    if 'last_h_speed' in cur:
-        
-        last_h_speed = cur['last_h_speed']
-        print("Speed= %d km/h" % int(last_h_speed))
-        # detect takeoff: speed of 10km/h
-        if ps['TakeOff']==0:
-            if (last_h_speed > 10): tof = 1
-        
-        else:
-            if (last_h_speed < 5):  lan = 1
-    
-    
-    # otherwise use distance from last record
-    else:
-        
-        last_h_speed = -1
-        # detect takeoff: move of 10m
-        if ps['TakeOff']==0:
-            if (dist > 10): tof = 1
-        
-        else:
-            if (dist < 1):  lan = 1
-    
-    if tof:
-        ps.update({'TakeOff': 1})
-        print("Pilot %s takeoff V" % cur['pseudo'])
-     
-    if lan:
-        ps.update({'Landed': 1})
-        print("Pilot %s landed" % cur['pseudo'])
 
-    # pilot landed but not cleared
-    if (ps['Landed'] and ps['Cleared']==0):
-        print("ALARM ! Pilot %s" % cur['pseudo'])
-        alarm = 1
+    if ps['new']:            
+        #first log, do not check.
+        ps.update({"new": 0})
+    else:   
+        # if speed is sent by device, use speed
+        if 'last_h_speed' in cur:
+            
+            last_h_speed = int(cur['last_h_speed'])
+            ps.update({"last_h_speed": last_h_speed})
+            print("Speed= %d km/h" % last_h_speed)
+            # detect takeoff: speed of 10km/h
+            if ps['TakeOff']==0:
+                if (last_h_speed > int(params['VitMinDeco'])): tof = 1
+            
+            # last_h_speed not reliable to detect landing (shows 0 unexpectidly)
+#             else:
+#                 if (last_h_speed < 5):  lan = 1
+        
+        
+        # otherwise use distance from last record
+        else:
+            
+            # detect takeoff: move of 10m
+            if ps['TakeOff']==0:
+                if (distm > int(params['DistMinDeco'])): tof = 1
+            
+            else:
+                if (distm < int(params['DistMaxPose'])):  lan = 1
+        
+        if tof:
+            ps.update({'TakeOff': 1})
+            print("Pilot %s takeoff V" % cur['pseudo'])
+         
+        if lan:
+            ps.update({'Landed': 1})
+            print("Pilot %s landed" % cur['pseudo'])
+
+        # pilot landed but not cleared
+        if (ps['Landed'] and ps['Cleared']==0):
+            print("ALARM ! Pilot %s" % cur['pseudo'])
+            alarm = 1
         
 
     ps.update({  "last_lat": cur['last_latitude'],\
                  "last_lon": cur['last_longitude'],\
-                 "last_alt": cur['last_altitude'],\
-                 "last_h_speed": int(last_h_speed),\
+                 "last_dist": distm,\
+                 "last_alt": int(cur['last_altitude']),\
                  "last_postime": cur['last_position_utc_timestamp_unix']})
     return((ps,alarm))       
 
@@ -205,10 +223,8 @@ def isPilotTooFar(elem):
     lat=widgets['strvar']['Latitude'].get()
     alt=widgets['strvar']['ALtitude'].get()
     if len(lon) and len(lat) and len(alt):
-        dist= sqrt(\
-            ((lon-elem['last_longitude'])*100)**2 +\
-            ((lat-elem['last_latitude'] )*100)**2 +\
-            ( alt-elem['last_altitude'])**2 ) 
+        dist = calcDist(lat, lon, alt, elem['last_latitude'],\
+            elem['last_latitude'],elem['last_altitude'])
         if dist > params['MaxDistance']:
             return(1)
         else:
@@ -217,7 +233,22 @@ def isPilotTooFar(elem):
         # center point not defined, so no filtering
         return(0)
 
-    
+ 
+# -----------------------------------------------
+# distance calc between 2 gps coordonates
+# in decimal degrees and z in meter
+# return in km
+# -----------------------------------------------
+def calcDist(x1,y1,z1,x2,y2,z2):
+
+    k1 = 111000           # 1 deg is roughly 111km
+    k2 = 111000*cos(x1)   # 1 deg is roughly 111km at equator
+    dist= sqrt(\
+        ((int(x1)-int(x2))*k1)**2 +\
+        ((int(y1)-int(y2))*k2)**2 +\
+         (int(z1)-int(z2))**2 )/1000
+    return(dist)
+  
 # -----------------------------------------------
 # load pilot table from backup file
 # -----------------------------------------------
@@ -226,8 +257,12 @@ def loadPilotTable():
     global PilotsStatus
     if os.path.isfile(PILOTS_STATUS):
         with open(PILOTS_STATUS, 'r') as in_file:
-            PilotsStatus = json.load(in_file)
+            content = in_file.read()
             in_file.close()
+            if len(content):
+                PilotsStatus = json.loads(content)
+            else:
+                PilotsStatus = {}
     else:
         PilotsStatus = {}
     
@@ -258,11 +293,20 @@ def updatePilotTable():
         elem=PilotsStatus[p]
         deltat = now-int(elem['last_postime'])
         (status,color) = calcStatus(elem)
-        widgets['pilotStat'][p].sv.set(status)             # change the content of this widget
-        widgets['pilotStat'][p].entry.configure(bg=color)   # change the color of this widget
-        widgets['pilotRTim'][p].sv.set(deltat)
-
-    savePilotTable() 
+        if p in widgets['pilotStat']:
+            # update existing line in the table
+            widgets['pilotStat'][p].sv.set(status)             # change the content of this widget
+            widgets['pilotStat'][p].entry.configure(bg=color)   # change the color of this widget
+            widgets['pilotRTim'][p].sv.set(deltat)
+            widgets['pilotRTim'][p].sv.set(deltat)
+            widgets['pilotAlt'][p].sv.set(elem['last_alt'])
+            widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
+            widgets['pilotDist'][p].sv.set(elem['last_dist'])
+        else:   
+            # add a new line in the table
+            rawnbr = widgets['panel']['rawnb']+1
+            widgets['panel']['rawnb'] = rawnbr
+            addLineInTable(rawnbr, p, elem)
 
         
 # -----------------------------------------------
@@ -371,10 +415,26 @@ def saveParam():
 
 
 # -----------------------------------------------
+# fetch data and parse
+# -----------------------------------------------
+def fetchAndParse():
+
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    # begin to grab info
+    infolist = fetchDatabase()
+    if infolist is None: 
+        print("fetch is void")    
+    else:
+        # filter and parse data
+        parseData(infolist)
+
+# -----------------------------------------------
 # Manage starting process
 # -----------------------------------------------
 def processStart():
-
+    
+    saveParam()
+    
     #1. load the pilot filter (if any)
     loadPilotList()
     
@@ -382,42 +442,22 @@ def processStart():
     loadPilotTable()
         
     #3. begin to grab info
-    infolist = fetchDatabase()
-    if infolist is None: 
-        print("fetch is void")    
-    else:
-        # filter and parse data
-        parseData(infolist)
+    fetchAndParse()    
     
+    #4. create pilot table and open panel
+    createPilotsPanel(nb)
+    nb.select(1)  
     
-    #2. create pilot table and open panel
-    
-    
-    #3. start the recurrent updater
-     
+    #5. start the recurrent updater
+    generalUpdater()
 
 # -----------------------------------------------
 # Recurrent process
 # -----------------------------------------------
 def generalUpdater():   
     
-
-#     #1. get all data
-#     infolist = fetchDatabase()
-#     if infolist is None: 
-#         print("fetch is void")    
-#     else:
-#         #2. filter and parse data
-#         parseData(infolist)
-#     print("------------------------------------------------------------")
-
-    
-#     #TBR--- emulate for debug only
-#     loadPilotTable()
-#     #TBR---
-
+    fetchAndParse()
     updatePilotTable()
-
     root.after(REFRESH_PERIOD*1000,generalUpdater)
     
     
@@ -514,6 +554,32 @@ class Cell(ttk.Entry):
 #             self.entry.configure(text="Undo") 
 #         elif self.entry.get('text')=='Undo':
 #             self.entry.configure(text="Clear") 
+
+# ------------------------------------------------------------------------------
+# scrollable object to display a table into
+# ------------------------------------------------------------------------------
+class Tabview(tk.Frame):
+    def __init__(self,parent):
+        super().__init__(parent)
+        self.parent=parent
+        self.canvas = tk.Canvas(self.parent)
+        self.frame = ttk.Frame(self.canvas)
+        self.canvas.create_window(0, 0, anchor='nw', window=self.frame)
+        # ajout des scrollbars
+        vbar = ttk.Scrollbar(self.parent, orient='vertical', command=self.canvas.yview)
+        hbar = ttk.Scrollbar(self.parent, orient='horizontal', command=self.canvas.xview)
+        self.canvas.configure(xscrollcommand=hbar.set,
+                         yscrollcommand=vbar.set,
+                         scrollregion=self.canvas.bbox('all'))
+ 
+        self.canvas.grid(row=0, column=0, sticky='eswn')
+        vbar.grid(row=0, column=1, sticky='ns')
+        hbar.grid(row=1, column=0, sticky='ew')
+ 
+        self.canvas.bind('<Configure>', self.on_resize)
+ 
+    def on_resize(self,event):
+        self.canvas.configure(scrollregion=self.canvas.bbox('all'))
     
 
 # ------------------------------------------------------------------------------
@@ -524,59 +590,104 @@ class Cell(ttk.Entry):
 # ------------------------------------------------------------------------------
 def createPilotsPanel(nb):   
     
+    global objcan
     frame=ttk.Frame(nb)
-    frame.pack()
-    nb.add(frame, text="Status pilotes", padding='2mm')
-    Label(frame, relief='groove', font=font_title, bd=1, bg='#d9d98c', text="STATUS PILOTES",width=1000).pack(side='top', padx=2, pady=2)
+#     frame.pack()
+    frame.grid(row=0, column=0, sticky='n')
+    handle=nb.add(frame, text="Status pilotes", padding='2mm')
+#     Label(frame, relief='groove', font=font_title, bd=1, bg='#d9d98c', text="STATUS PILOTES",\
+#             width=1000).pack(side='top', padx=2, pady=2)
+    Label(frame, relief='groove', font=font_title, bd=1, bg='#d9d98c', text="STATUS PILOTES",\
+            width=1000).grid(row=1, column=0, sticky='n')
     
     dateLabel=Label(frame, font=font_def, bd=1, text=dt_string)
-    dateLabel.pack(side='top')
+#     dateLabel.pack(side='top')
+    dateLabel.grid(row=2, column=0, sticky='n')
     widgets['dateLabel']=dateLabel
-
-    canv = Canvas(frame, width=600, height=300, scrollregion=(0, 0, 600, 1200))
-    canv.pack(side='left',fill='both', expand=1)
-
-    sb = Scrollbar(frame,orient='vertical', width=20, command=canv.yview)
-    sb.pack(side='right',fill='y')
-
-    canv.configure(yscrollcommand=sb.set)
     
-    createPilotTable(canv)
+    pilottabframe=Tabview(frame)
+    pilottabframe.grid(row=3, column=0, sticky='n')
+#     canv = Canvas(frame, width=600, height=300, scrollregion=(0, 0, 600, 1200))
+#     pilottabframe=tk.Frame(canv)
+#     canv.create_window(0, 0, anchor='nw', window=pilottabframe)
+#     vbar = Scrollbar(frame,orient='vertical', width=10, command=canv.yview)
+#     hbar = Scrollbar(frame,orient='horizontal', width=10, command=canv.xview)
+#     canv.configure(xscrollcommand=hbar.set,
+#                          yscrollcommand=vbar.set,
+#                          scrollregion=canv.bbox('all'))
+# 
+#     canv.grid(row=0, column=0, sticky='eswn')
+#     vbar.grid(row=0, column=1, sticky='ns')
+#     hbar.grid(row=1, column=0, sticky='ew')
+#  
+#     canv.bind('<Configure>', on_resize)
+#     objcan=canv
+
+#     canv.pack(side='left',fill='both', expand=1)
+# 
+#     vb.pack(side='right',fill='y')
+#     canv.configure(yscrollcommand=vb.set)
+    
+# # #     createPilotTable(pilottabframe)    
+
+#     createPilotTable(canv)
 
 
 # -----------------------------------------------
 # Create pilots table
 # -----------------------------------------------
-def createPilotTable(parent):   
+# def createPilotTable(parent):   
+def createPilotTable(pilottabframe):   
     
     global PilotsStatus
     
-    # first create a scrollable container
-    pilottabframe=tk.Frame(parent)
-    parent.create_window((0,0), window=pilottabframe, anchor='nw')    
+#     # first create a scrollable container
+#     pilottabframe=tk.Frame(parent)
+#     widgets['panel']['pilot'] = pilottabframe
+#     parent.create_window((0,0), window=pilottabframe, anchor='nw')    
+
 
     # header creation
     colInd=0
-    for (header,width) in [['Pseudo',30], ['Prenom',30], ['Nom',30], ['Status',20], ['Dernier log',15], ['Clear',15] ]:
+    for (header,width) in [['Pseudo',30], ['Prenom',20], ['Nom',20], ['ALT',10], \
+            ['VitH',10], ['Dist',10],['Status',15], ['Dernier log',15], ['Clear',15]]:
         Cell(pilottabframe,x=colInd,y=0, w=width, defval=header, options=optionsH)   
         colInd+=1
     
-    now = int(time.time())
     # table body
     rawnbr=0
     for p in PilotsStatus:
         rawnbr+=1
         elem=PilotsStatus[p]
-        deltat = now-int(elem['last_postime'])
-        (status,color) = calcStatus(elem)
-        Cell(pilottabframe, x=0,y=rawnbr, w=30, defval=p,               options=optionsC, bgc=defaultbg) 
-        Cell(pilottabframe, x=1,y=rawnbr, w=30, defval=elem['Name'],    options=optionsC, bgc=defaultbg ) 
-        Cell(pilottabframe, x=2,y=rawnbr, w=30, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
-        c=Cell(pilottabframe, x=3,y=rawnbr, w=20, defval=status,        options=optionsC, bgc=color ) 
-        d=Cell(pilottabframe, x=4,y=rawnbr, w=15, defval=deltat,        options=optionsC, bgc=defaultbg ) 
-        Cell(pilottabframe, x=5,y=rawnbr, w=15, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
-        widgets['pilotStat'][p]=c   # keep an handle to change the status later
-        widgets['pilotRTim'][p]=d
+        addLineInTable(rawnbr, p, elem)
+
+    widgets['panel']['rawnb'] = rawnbr
+    widgets['panel']['pilot'] = pilottabframe
+    
+# -----------------------------------------------
+# Create pilots table
+# -----------------------------------------------
+def addLineInTable(rawnbr, p, elem):   
+    
+    f = widgets['panel']['pilot']
+    now = int(time.time())
+    deltat = now-int(elem['last_postime'])
+    (status,color) = calcStatus(elem)
+    Cell(f, x=0,y=rawnbr, w=30, defval=p,               options=optionsC, bgc=defaultbg) 
+    Cell(f, x=1,y=rawnbr, w=20, defval=elem['Name'],    options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=2,y=rawnbr, w=20, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=3,y=rawnbr, w=10, defval=elem['last_alt'], options=optionsC, bgc=defaultbg ) 
+    widgets['pilotAlt'][p]=c   # keep an handle to change the status later
+    c=Cell(f, x=4,y=rawnbr, w=10, defval=elem['last_h_speed'], options=optionsC, bgc=defaultbg ) 
+    widgets['pilotHs'][p]=c   # keep an handle to change the status later
+    c=Cell(f, x=5,y=rawnbr, w=10, defval=elem['last_dist'], options=optionsC, bgc=defaultbg ) 
+    widgets['pilotDist'][p]=c   # keep an handle to change the status later
+    c=Cell(f, x=6,y=rawnbr, w=15, defval=status,        options=optionsC, bgc=color ) 
+    widgets['pilotStat'][p]=c   # keep an handle to change the status later
+    c=Cell(f, x=7,y=rawnbr, w=15, defval=deltat,        options=optionsC, bgc=defaultbg ) 
+    widgets['pilotRTim'][p]=c
+    Cell(f, x=8,y=rawnbr, w=15, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
+    
         
 # ------------------------------------------------------------------------------
 # OPTIONS PANEL
@@ -649,6 +760,8 @@ def createParametersPanel(nb):
     
     createParamsTable(canv)
 
+#TBR: saving of file, distance infos
+ 
 # -----------------------------------------------
 # utility for spot selection
 # -----------------------------------------------
@@ -850,8 +963,12 @@ optionsDescr = {'font': font_def, 'bd': 1, 'relief': 'groove', 'anchor': 'w' }
 # Panels creation
 # -----------------------------------------------
 widgets = {} 
-widgets['pilotStat'] = {}       # status widgets
-widgets['pilotRTim'] = {}       # refresh date widgets
+widgets['pilotStat']= {}       # status widgets
+widgets['pilotRTim']= {}       # refresh date widgets
+widgets['pilotAlt'] = {} 
+widgets['pilotHs']  = {} 
+widgets['pilotDist']= {} 
+widgets['panel']    = {} 
 widgets['dateLabel'] = {} 
 widgets['saveButtonParam'] = {} 
 widgets['paramTab'] = {}
