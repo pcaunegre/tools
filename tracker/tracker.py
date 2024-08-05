@@ -347,7 +347,7 @@ def locatePilot(p):
     lat = PilotsStatus[p]['last_lat']
     lon = PilotsStatus[p]['last_lon']
     url = "https://www.spotair.mobi/?lat="+str(lat)+"&lng="+str(lon)+"&zoom=15"
-    command = 'firefox  --new-window \"'+url+'\"'
+    command = 'firefox  --new-window \"'+url+'\" &'
     print(command,file=logfile, flush=True)    
     os.system(command)
     
