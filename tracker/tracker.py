@@ -606,7 +606,7 @@ def createPilotTable(parent):
     
     # first create a scrollable container
     pilottabframe=tk.Frame(parent)
-    parent.create_window((0,0), window=pilottabframe, anchor='nw')    
+    parent.create_window((0,25), window=pilottabframe, anchor='nw')    
     widgets['panel']['pilot'] = pilottabframe
 
     lat = params['Latitude']
@@ -618,9 +618,9 @@ def createPilotTable(parent):
     
     # header creation
     colInd=0
-    for (header,width) in [['Pseudo',25], ['Prenom',15], ['Nom',15], ['ALT',10], \
-            ['Step',10], ['VitHz',7], ['Dist',10],['Status',15], ['Dernier log',10], ['Clear',10], ['Loc',10]]:
-        Cell(pilottabframe,x=colInd,y=0, w=width, defval=header, options=optionsH)   
+    for (header,width) in [['Pseudo',25], ['Prenom',15], ['Nom',15], ['Alti',10], \
+            ['Step (m)',10], ['VitHz',7], ['Dist (km)',10],['Status',15], ['Dernier log',10], ['Clear',10], ['Loc',10]]:
+        Cell(parent,x=colInd,y=0, w=width, defval=header, options=optionsH)   
         colInd+=1
     
     # table body
