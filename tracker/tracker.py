@@ -95,7 +95,8 @@ def parseData(infolist):
     for elem in infolist:
         el = infolist[elem]
         pseudo=el['pseudo']
-
+        (toofar,distkm) = isPilotTooFar(el)
+        
         # filtering
         if params['Filtrage'] == 'Fichier':
             # is this pilot in list ?
@@ -105,8 +106,7 @@ def parseData(infolist):
         
         elif params['Filtrage'] == 'Distance':
             # is this pilot close enough ?
-            if isPilotTooFar(el): 
-                continue
+            if toofar: continue
             
         # create new item if needed
         if pseudo not in PilotsStatus: 
@@ -124,6 +124,7 @@ def parseData(infolist):
             pilot = { "Name": name, "Surname": surname, "Cleared": 0, "Landed": 0, "TakeOff": 0,\
                 "last_alt": int(el['last_altitude']), "last_lat": el['last_latitude'], \
                 "last_lon": el['last_longitude'], "last_dist": 0, "last_h_speed": speed,\
+                "d2atter": distkm,\
                 "last_postime": el['last_position_utc_timestamp_unix'], "new": 1}
         
         else:
@@ -159,9 +160,9 @@ def checkPilot(ps,cur):
     
     tof = 0; lan = 0; alarm = 0
     # rough distance calculation (in meter) from gps dec coord and altitude    
-    distm = calcDist(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
+    distm = calcDistm(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
         cur['last_latitude'], cur['last_longitude'], cur['last_altitude'])
-    print("Distance= %d m" % distm,file=logfile, flush=True)
+    print("Step= %d m" % distm,file=logfile, flush=True)
     
     deltaTime=int(cur['last_position_utc_timestamp_unix'])-int(ps['last_postime'])
     print("DeltaT= %d s" % deltaTime,file=logfile, flush=True)
@@ -174,7 +175,7 @@ def checkPilot(ps,cur):
         if deltaTime==0:
             print("log not new, skip check",file=logfile, flush=True)
         else:
-            # if speed is sent by device, use speed
+            # if speed is available, use speed to detect takeoff
             if 'last_h_speed' in cur:
                 
                 last_h_speed = int(cur['last_h_speed'])
@@ -190,8 +191,11 @@ def checkPilot(ps,cur):
                 if (distm > int(params['DistMinDeco'])): tof = 1
             
             else:
-                if (distm < int(params['DistMaxPose'])):  lan = 1
-            
+                if (distm < int(params['DistMaxPose'])): lan = 1
+                
+                # sometimes step is null but speed is not
+                if 'last_h_speed' in cur:
+                    if last_h_speed > int(params['VitMinDeco']): lan = 0
             
             if tof:
                 ps.update({'TakeOff': 1})
@@ -216,42 +220,60 @@ def checkPilot(ps,cur):
 
 # -----------------------------------------------
 # check whether pilot is close to the playground
+# returns boolean + distance to landing
 # -----------------------------------------------
 def isPilotTooFar(elem):
    
     global params
-    lat=widgets['strvar']['Latitude'].get()
-    lon=widgets['strvar']['Longitude'].get()
-    alt=widgets['strvar']['Altitude'].get()
-    if len(lon) and len(lat) and len(alt):
-        distkm = 0.001*calcDist(lat, lon, alt, elem['last_latitude'],\
-            elem['last_longitude'],elem['last_altitude'])
+    lat = params['Latitude']
+    lon = params['Longitude']    
+    if len(lon) and len(lat):
+        distkm = calcDistKm(lat, lon, elem['last_latitude'], elem['last_longitude'])
         if distkm > float(params['MaxDistance']):
             print("%s pilot too far %d" % (elem['pseudo'], int(distkm)),file=logfile, flush=True)
-            return(1)
+            return((1,distkm))
         else:
-            return(0)
+            return((0,distkm))
     else:
         # center point not defined, so no filtering
-        return(0)
+        return((0,"-"))
 
  
 # -----------------------------------------------
-# distance calc between 2 gps coordonates
-# in decimal degrees and z in meter
+# distance calc between 2 gps coordinates
+# in decimal degrees and z in meter, for small distances
 # return in m
 # -----------------------------------------------
-def calcDist(x1,y1,z1,x2,y2,z2):
+def calcDistm(x1,y1,z1,x2,y2,z2):
 
     k1 = 111000           # 1 deg is roughly 111km
-    k2 =  77000           # 1 deg is roughly 111km at equator
-#     k2 = 111000*cos(6.3*float(x1)/360)   # 1 deg is roughly 111km at equator
+    k2 = 111000*cos(6.3*float(x1)/360)   # 1 deg is roughly 111km at equator
     dist= sqrt(\
         ((float(x1)-float(x2))*k1)**2 +\
         ((float(y1)-float(y2))*k2)**2 +\
          (float(z1)-float(z2))**2 )
     return(int(dist))
-  
+
+
+# -----------------------------------------------
+# distance calc between 2 lat/lon coordinates
+# in decimal degrees, for long distance
+# return in km
+# -----------------------------------------------
+def calcDistKm(x1,y1,x2,y2):
+
+    R = 6373.0
+    lat1 = radians(float(x1))
+    lon1 = radians(float(y1))
+    lat2 = radians(float(x2))
+    lon2 = radians(float(y2))
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    distance = R * c
+    return(int(distance))
+    
 # -----------------------------------------------
 # load pilot table from backup file
 # -----------------------------------------------
@@ -394,9 +416,8 @@ def saveParam():
     for el in widgets['paramTab']:
         params[el]=widgets['paramTab'][el].get()  # extract value from object
     
-    
     writeParams(params)
-    widgets['saveButtonParam'].configure(bg=defaultbg)
+#     widgets['saveButtonParam'].configure(bg=defaultbg)
 
 
 # -----------------------------------------------
@@ -500,7 +521,7 @@ class Cell(ttk.Entry):
 #             self.sv.set(defval)
             self.entry = Scale(self.master, orient='horizontal',  **options)  #  length=350
             self.entry.set(defval) 
-            self.entry.bind("<ButtonRelease-1>", self.ValueChanged)                   
+#             self.entry.bind("<ButtonRelease-1>", self.ValueChanged)                   
         
         elif wtype=="tog":
             # making a toggle button in the cell
@@ -516,9 +537,10 @@ class Cell(ttk.Entry):
             self.sv.set(defval)
             self.entry = tk.Frame(self.master)
             for butt in togvals:
-                b = Radiobutton(self.entry, variable=self.sv, text=butt, command=self.ValueChanged, value=butt, font=font_def)
+#                 b = Radiobutton(self.entry, variable=self.sv, text=butt, command=self.ValueChanged, value=butt, font=font_def)
+                b = Radiobutton(self.entry, variable=self.sv, text=butt,  value=butt, font=font_def)
                 b.pack(side='left', expand=1)    
-            self.entry.bind("<ButtonRelease-1>", self.ValueChanged)                   
+#             self.entry.bind("<ButtonRelease-1>", self.ValueChanged)                   
 
         elif wtype=="clearb":
             # making a single push button in the cell
@@ -536,8 +558,8 @@ class Cell(ttk.Entry):
     def Locate(self):
         locatePilot(self.pid)
         
-    def ValueChanged(self,newval=''):
-        widgets['saveButtonParam'].configure(bg='Yellow')        
+#     def ValueChanged(self,newval=''):
+#         widgets['saveButtonParam'].configure(bg='Yellow')        
 
     def OnClick(self):
         curval=self.sv.get()
@@ -546,17 +568,6 @@ class Cell(ttk.Entry):
         self.sv.set(newval)
         self.ValueChanged()
         
-
-#         self.ValueChanged()
-# 
-#         print('text')
-#         print(self.entry.get('text'))
-#         if self.entry.get('text')=='Clear':
-#             clearPilotStatus(self.pid)
-#             self.entry.configure(text="Undo") 
-#         elif self.entry.get('text')=='Undo':
-#             self.entry.configure(text="Clear") 
-
 
 # ------------------------------------------------------------------------------
 # Create pilots panel
@@ -598,10 +609,17 @@ def createPilotTable(parent):
     parent.create_window((0,0), window=pilottabframe, anchor='nw')    
     widgets['panel']['pilot'] = pilottabframe
 
+    lat = params['Latitude']
+    lon = params['Longitude']    
+    if len(lat) and len(lon): 
+        distcol = 1
+    else: 
+        distcol = 0
+    
     # header creation
     colInd=0
-    for (header,width) in [['Pseudo',30], ['Prenom',20], ['Nom',20], ['ALT',10], \
-            ['VitH',7], ['Dist',10],['Status',15], ['Dernier log',10], ['Clear',10], ['Loc',10]]:
+    for (header,width) in [['Pseudo',25], ['Prenom',15], ['Nom',15], ['ALT',10], \
+            ['Step',10], ['VitHz',7], ['Dist',10],['Status',15], ['Dernier log',10], ['Clear',10], ['Loc',10]]:
         Cell(pilottabframe,x=colInd,y=0, w=width, defval=header, options=optionsH)   
         colInd+=1
     
@@ -623,21 +641,23 @@ def addLineInTable(rownbr, p, elem):
     now = int(time.time())
     deltat = now-int(elem['last_postime'])
     (status,color) = calcStatus(elem)
-    Cell(f, x=0,y=rownbr, w=30, defval=p,               options=optionsC, bgc=defaultbg) 
-    Cell(f, x=1,y=rownbr, w=20, defval=elem['Name'],    options=optionsC, bgc=defaultbg ) 
-    Cell(f, x=2,y=rownbr, w=20, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=0,y=rownbr, w=25, defval=p,               options=optionsC, bgc=defaultbg) 
+    Cell(f, x=1,y=rownbr, w=15, defval=elem['Name'],    options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=2,y=rownbr, w=15, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
     c=Cell(f, x=3,y=rownbr, w=10, defval=elem['last_alt'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotAlt'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=4,y=rownbr, w=7, defval=elem['last_h_speed'], options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=4,y=rownbr, w=10, defval=elem['last_dist'], options=optionsC, bgc=defaultbg ) 
+    widgets['pilotStep'][p]=c   # keep an handle to change the status later
+    c=Cell(f, x=5,y=rownbr, w=7, defval=elem['last_h_speed'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotHs'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=5,y=rownbr, w=10, defval=elem['last_dist'], options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=6,y=rownbr, w=10, defval=elem['d2atter'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotDist'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=6,y=rownbr, w=15, defval=status,        options=optionsC, bgc=color ) 
+    c=Cell(f, x=7,y=rownbr, w=15, defval=status,        options=optionsC, bgc=color ) 
     widgets['pilotStat'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=7,y=rownbr, w=10, defval=deltat,        options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=8,y=rownbr, w=10, defval=deltat,        options=optionsC, bgc=defaultbg ) 
     widgets['pilotRTim'][p]=c
-    Cell(f, x=8,y=rownbr, w=10, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
-    Cell(f, x=9,y=rownbr, w=10, wtype="locb",defval="Voir",pid=p, options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=9,y=rownbr, w=10, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
+    Cell(f, x=10,y=rownbr, w=10, wtype="locb",defval="Voir",pid=p, options=optionsC, bgc=defaultbg ) 
 
 # -----------------------------------------------
 # table update
@@ -663,7 +683,8 @@ def updatePilotTable():
             widgets['pilotRTim'][p].sv.set(deltat)
             widgets['pilotAlt'][p].sv.set(elem['last_alt'])
             widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
-            widgets['pilotDist'][p].sv.set(elem['last_dist'])
+            widgets['pilotStep'][p].sv.set(elem['last_dist'])
+            widgets['pilotDist'][p].sv.set(elem['d2atter'])
         else:   
             # add a new line in the table
             rownbr = widgets['panel']['rownb']+1
@@ -737,9 +758,9 @@ def createParametersPanel(nb):
     
     # - options section
     Label(frame, relief='groove', font=font_subtitle, bd=1, bg='#d9d98c',anchor='w', text="Options",width=1000).pack(side='top')
-    b=Button(frame,bd=3,text="Sauvegarder",height=10, command=saveParam)
-    b.pack(side='right')
-    widgets['saveButtonParam']=b
+#     b=Button(frame,bd=3,text="Sauvegarder",height=10, command=saveParam)
+#     b.pack(side='right')
+#     widgets['saveButtonParam']=b
 
     canv = Canvas(frame, width=600, height=300, scrollregion=(0, 0, 600, 1200))
     canv.pack(side='left',fill='both', expand=1)
@@ -947,10 +968,11 @@ widgets['pilotStat']= {}       # status widgets
 widgets['pilotRTim']= {}       # refresh date widgets
 widgets['pilotAlt'] = {} 
 widgets['pilotHs']  = {} 
-widgets['pilotDist']= {} 
+widgets['pilotStep']= {} 
+widgets['pilotDist']= {}
 widgets['panel']    = {} 
 widgets['dateLabel'] = {} 
-widgets['saveButtonParam'] = {} 
+# widgets['saveButtonParam'] = {} 
 widgets['paramTab'] = {}
 widgets['filesel'] = {}
 widgets['strvar'] = {}
