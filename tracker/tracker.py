@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-# -*- coding: utf-8 -*-
 
 # ------------------------------------------------------------------------------
 # tracker.py
@@ -139,7 +138,7 @@ def parseData(infolist):
         # recording
         PilotsStatus[pseudo] = pilot
 
-    # save infos ib backup file
+    # save infos in backup file
     savePilotTable()
     
     # TO BE REVIEWED
@@ -330,11 +329,17 @@ def clearPilotStatus(p):
     
     global PilotsStatus
     
-    elem=PilotsStatus[p]
+    elem=PilotsStatus[p]        
+
     if elem['Cleared']:
-        elem['Cleared']=0
+        if elem['Landed']:
+            elem['Cleared']=0
+            elem['Landed']=0
+        
     else:
-        elem['Cleared']=1
+        if elem['Landed']: elem['Cleared']=1
+        else: elem['Landed']=1
+    
     PilotsStatus[p]=elem
     updatePilotTable()
         
@@ -585,6 +590,7 @@ def createPilotsPanel(nb):
 
     canv = Canvas(frame, width=600, height=300, scrollregion=(0, 0, 600, 1200))
     canv.pack(side='left',fill='both', expand=1)
+    widgets['canvas']=canv
 
     sb = Scrollbar(frame,orient='vertical', width=20, command=canv.yview)
     sb.pack(side='right',fill='y')
@@ -680,7 +686,6 @@ def updatePilotTable():
             widgets['pilotStat'][p].sv.set(status)             # change the content of this widget
             widgets['pilotStat'][p].entry.configure(bg=color)   # change the color of this widget
             widgets['pilotRTim'][p].sv.set(deltat)
-            widgets['pilotRTim'][p].sv.set(deltat)
             widgets['pilotAlt'][p].sv.set(elem['last_alt'])
             widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
             widgets['pilotStep'][p].sv.set(elem['last_dist'])
@@ -691,6 +696,8 @@ def updatePilotTable():
             widgets['panel']['rownb'] = rownbr
             addLineInTable(rownbr, p, elem)
 
+    maxscroll=widgets['panel']['rownb']*30
+    widgets['canvas'].configure(scrollregion=(0, 0, 600, maxscroll))
         
 # ------------------------------------------------------------------------------
 # OPTIONS PANEL
@@ -944,7 +951,7 @@ root.title("Race Tracker")
 root.geometry(geometry)
 # root.bind("<Configure>", getgeom)
 
-nb = ttk.Notebook(root)   # Création du systeme d'onglets
+nb = ttk.Notebook(root)   # Creation du systeme d'onglets
 nb.pack(fill=BOTH,expand=1)
 defaultbg = root.cget('bg')  #  #d9d9d9
 
@@ -976,6 +983,7 @@ widgets['dateLabel'] = {}
 widgets['paramTab'] = {}
 widgets['filesel'] = {}
 widgets['strvar'] = {}
+widgets['canvas'] = {}
 
 session = HTMLSession()
 
