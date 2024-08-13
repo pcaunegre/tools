@@ -187,10 +187,10 @@ def checkPilot(ps,cur):
             # in addition use distance from last record
             # detect takeoff: move of 10m
             if ps['TakeOff']==0:
-                if (distm > int(params['DistMinDeco'])): tof = 1
+                if (distm > int(params['StepMinDeco'])): tof = 1
             
             else:
-                if (distm < int(params['DistMaxPose'])): lan = 1
+                if (distm < int(params['StepMaxPose'])): lan = 1
                 
                 # sometimes step is null but speed is not
                 if 'last_h_speed' in cur:
