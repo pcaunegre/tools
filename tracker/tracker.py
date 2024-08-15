@@ -359,19 +359,118 @@ def locatePilot(p):
 # ----------------------------------------------------------
 #
 # proc readParameterConfig
-#        load the config of parameters instruments
-#
+#   load the config of parameters instruments
+#   set the config global
 # ----------------------------------------------------------
 def readParameterConfig():
     
-    global paramconfigfile
+    global paramconfigfile, config
     f=paramconfigfile
     
     with open(f) as f:
         config = json.load(f)
+
+#     config = {
+#     "parameters": [
+#         {
+#             "name": "Filtrage",
+#             "type": "string",
+#             "method": "radio",
+#             "list": ["Fichier", "Distance", "Aucun"],
+#             "def": "Fichier",
+#             "descr": "Filtrage par fichier, par la distance a l'atterrissage, ou pas de filtre"
+#         },
+#         {
+#             "name": "MaxDistance",
+#             "type": "string",
+#             "method": "entry",
+#             "def": "50",
+#             "descr": "Filtrage des pilotes a une distance inferieure a cette valeur en km"
+#         },
+#         {
+#             "name": "VitMinDeco",
+#             "type": "string",
+#             "method": "entry",
+#             "def": "10",
+#             "descr": "Vitesse minimale pour detecter le deco (si vitesse reportee)"
+#         },
+#         {
+#             "name": "StepMinDeco",
+#             "type": "string",
+#             "method": "entry",
+#             "def": "10",
+#             "descr": "Variation de position (en m) minimale pour detecter le mode vol"
+#         },
+#         {
+#             "name": "StepMaxPose",
+#             "type": "string",
+#             "method": "entry",
+#             "def": "5",
+#             "descr": "Variation de position (en m) maximale pour detecter le mode sol"
+#         },
+#         {
+#             "name": "FichierOptions",
+#             "type": "string",
+#             "method": "entry",
+#             "def": "~/.tracker.options",
+#             "descr": "Fichier de sauvegarde des options utilisateur"
+#         },
+#         {
+#             "name": "FichierPilotes",
+#             "type": "string",
+#             "method": "entry",
+#             "def": "~/.tracker.pilots",
+#             "descr": "Fichier de sauvegarde des positions pilotes"
+#         },
+#         {
+#             "name": "FichierLog",
+#             "type": "string",
+#             "method": "entry",
+#             "def": "~/.tracker.log",
+#             "descr": "Fichier log"
+#         }
+#         
+#     ],
+#     "spots": [
+#         {
+#             "name": "custom",
+#             "Longitude":  "",
+#             "Latitude":  "",
+#             "Altitude":  "",
+#             "descr": "Spot custom"
+#         },    
+#         {
+#             "name": "Arbas Attero",
+#             "Longitude":  0.904557,
+#             "Latitude":  42.990937,
+#             "Altitude":  420,
+#             "descr": "Atterrissage Arbas"
+#         },
+#         {
+#             "name": "Val Louron Attero",
+#             "Longitude":  0.405442,
+#             "Latitude":  42.802246,
+#             "Altitude":  951,
+#             "descr": "Atterrissage VL"
+#         },
+#         {
+#             "name": "Doussard",
+#             "Longitude":  6.222322,
+#             "Latitude":  45.781463,
+#             "Altitude":  466,
+#             "descr": "Atterrissage Anncey"
+#         },
+#         {
+#             "name": "Lumbin",
+#             "Longitude":  5.906357,
+#             "Latitude":  45.302509,
+#             "Altitude":  230,
+#             "descr": "Atterrissage St Hil"
+#         }
+#     ]
+# }
+
         
-    # print("Pin=%d"% rfpin)
-    return(config)
 
 # ----------------------------------------------------------
 # 
@@ -424,7 +523,19 @@ def saveParam():
     writeParams(params)
 #     widgets['saveButtonParam'].configure(bg=defaultbg)
 
+# -----------------------------------------------
+# Utility to get a param value
+#    if param is not saved, get default from config
+# -----------------------------------------------   
+def getParam(parname):   
 
+    global config, params
+    for el in config['parameters']:
+        if el['name'] == parname:
+            value = el['def']
+    if parname in params: value = params[parname]
+    return(value)
+    
 # -----------------------------------------------
 # fetch data and parse
 # -----------------------------------------------
@@ -726,7 +837,7 @@ def createParametersPanel(nb):
     Label(frame, font=font_def,relief='flat', bd=3,anchor='w',fg='blue', text="Ce fichier facultatif liste les pilotes a filtrer( fichier .csv contenant : Pseudo,Nom,Prenom). ",width=1000).pack(side='top')
     fileframe=tk.Frame(frame, relief='raised', height=20)
     fileframe.pack(side='top',fill='both', expand=0)
-    Label(fileframe, relief='flat', bd=1, text="Fichier pilote",width=15).pack(side='left')
+    Label(fileframe, relief='flat', bd=1, text="Fichier",width=15).pack(side='left')
     sv = tk.StringVar()
     if 'pilotfile' in params: PILOTS_FILE=params['pilotfile']
     sv.set(PILOTS_FILE)
@@ -736,8 +847,10 @@ def createParametersPanel(nb):
     l=Label(fileframe, relief='sunken', bd=1, font=font_ital, textvariable=sv,width=80)
     l.pack(side='left')
     widgets['filelab']=l
-    sf=Button(fileframe,relief='raised', bd=3,text="Open",height=1, command=selectfile)
+    sf=Button(fileframe,relief='raised', bd=3,text="Select",height=1, command=selectFile)
     sf.pack(side='left')
+    eb=Button(fileframe,relief='raised', bd=3,text="Editer",height=1, command=editFile)
+    eb.pack(side='left')
     Label(frame, relief='groove', bd=0).pack(side='top')        # spacer
 
     # - landing spot section
@@ -787,9 +900,8 @@ def createParametersPanel(nb):
 # -----------------------------------------------
 def createParamsTable(parent):
     
-    global params
-    # get config and last stored values
-    config = readParameterConfig()
+    global params, config
+
     # no more needed params = loadParams()
     widgets['prevParams']=params    # store current parameters 
     
@@ -810,6 +922,7 @@ def createParamsTable(parent):
     # Table body creation
     rownbrr=1
     for elem in config['parameters']:
+        if (('visib' in elem) and (not elem['visib'])): continue
         name=elem['name']
         Cell(paramstabframe,x=0,y=rownbrr,defval=name, w=15, options={'height': 2} )            # Id column
         
@@ -872,7 +985,7 @@ def updSpotEntry(W):
 # -----------------------------------------------
 # utility for file selection
 # -----------------------------------------------
-def selectfile():
+def selectFile():
 
     global PILOTS_FILE
     ret = filedialog.askopenfilename()
@@ -881,13 +994,22 @@ def selectfile():
         widgets['filesel'].set(PILOTS_FILE)
         widgets['filelab'].configure(font=font_def)
 
+# -----------------------------------------------
+# utility for file editing
+# -----------------------------------------------
+def editFile():
+
+    global PILOTS_FILE, params
+    command = getParam('Editeur') + ' ' + PILOTS_FILE
+    os.system(command)
+
 
 # -----------------------------------------------
 # utility for drop down list
 # -----------------------------------------------
 def getSpotList():
     
-    config = readParameterConfig()
+    global config
     outlist = []
     for elem in config['spots']:
         name=elem['name']
@@ -899,7 +1021,7 @@ def getSpotList():
 # -----------------------------------------------
 def getCoord(spot):
     
-    config = readParameterConfig()
+    global config
     outlist = []
     for elem in config['spots']:
         if elem['name']==spot:
@@ -990,6 +1112,9 @@ session = HTMLSession()
 loadParams()
 print("current params",file=logfile, flush=True)
 print(params,file=logfile, flush=True)
+
+readParameterConfig()
+
 createParametersPanel(nb)
 
 root.update()
