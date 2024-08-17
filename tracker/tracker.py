@@ -25,36 +25,34 @@ from math import *
 from tkinter import *
 from tkinter import ttk
 from tkinter import filedialog
+from tkinter import simpledialog
 import tkinter as tk
 import tkinter.font as tkFont
 
-
-FFVL_URL="https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp="
-REFRESH_PERIOD = 60
-# REFRESH_PERIOD = 10
 
 # ------------------------------------------------------------------------------
 # load pilot list from input csv file
 # ------------------------------------------------------------------------------
 def loadPilotList():
     
-    global PILOT_FILTER, params
-    PILOT_FILTER = {}
-    if params['Filtrage'] != 'Fichier':
-        print("not using pilot list to filter",file=logfile, flush=True)
+    global FILES, PilotsFilter
+    
+    PilotsFilter = {}
+    if getParam('Filtrage') != 'Fichier':
+        printlog("not using pilot list to filter")
         return()
         
-    if PILOTS_FILE=='' or PILOTS_FILE=='select a file' or not os.path.isfile(PILOTS_FILE):
-        print("pilot list undefined or missing",file=logfile, flush=True)
+    if FILES['pilotsFilter']=='' or FILES['pilotsFilter']=='select a file' or not os.path.isfile(FILES['pilotsFilter']):
+        printlog("pilot list undefined or missing")
         return()
     
-    with open(PILOTS_FILE, newline='') as csvfile:
+    with open(FILES['pilotsFilter'], newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in list(reader):
-            PILOT_FILTER[row['Pseudo']]={ "Name": row['Prenom'], "Surname": row['Nom']}
+            PilotsFilter[row['Pseudo']]={"Name": row['Prenom'], "Surname": row['Nom']}
         csvfile.close()
     
-    print(PILOT_FILTER,file=logfile, flush=True)
+    printlog(PilotsFilter)
 
 
 
@@ -64,21 +62,15 @@ def loadPilotList():
 def fetchDatabase():
     
     now = int(time.time()-60); # take position from last minute 
-    url =FFVL_URL+str(now)
-#     print("URL=%s" % url,file=logfile, flush=True)
+    url = getParam('ffvl_url')+str(now)
+
     try:
         ret = session.get(url)
     except:
-        print('Request failure',file=logfile, flush=True)
+        printlog('Request failure')
         return('')
     htmlContent = ret.content.decode('utf-8')
-    
-    #----debug
-    with open("debug", 'w') as deb_file:
-        print(htmlContent, file=deb_file)
-        deb_file.close()
-    #----
-        
+            
     l = json.loads(htmlContent)
     return(l)
 
@@ -89,7 +81,7 @@ def fetchDatabase():
 # ------------------------------------------------------------------------------
 def parseData(infolist):
     
-    global PilotsStatus, params, PILOT_FILTER
+    global PilotsStatus, PilotsFilter
     alarm = 0
     for elem in infolist:
         el = infolist[elem]
@@ -97,13 +89,13 @@ def parseData(infolist):
         (toofar,distkm) = isPilotTooFar(el)
         
         # filtering
-        if params['Filtrage'] == 'Fichier':
+        if getParam('Filtrage') == 'Fichier':
             # is this pilot in list ?
-            if not (pseudo in PILOT_FILTER): 
-                print("%s not in my list" % pseudo,file=logfile, flush=True)
+            if not (pseudo in PilotsFilter): 
+                printlog(pseudo+" not in my list")
                 continue
         
-        elif params['Filtrage'] == 'Distance':
+        elif getParam('Filtrage') == 'Distance':
             # is this pilot close enough ?
             if toofar: continue
             
@@ -111,11 +103,11 @@ def parseData(infolist):
         if pseudo not in PilotsStatus: 
             name='-'; surname='-'
             # infos coming from filter file
-            print("==  ITEM  NEW===============================",file=logfile, flush=True)
-            print(el,file=logfile, flush=True)
-            if pseudo in PILOT_FILTER:
-                name = PILOT_FILTER[pseudo]['Name']
-                surname = PILOT_FILTER[pseudo]['Surname']
+            printlog("==  ITEM  NEW===============================")
+            printlog(el)
+            if pseudo in PilotsFilter:
+                name = PilotsFilter[pseudo]['Name']
+                surname = PilotsFilter[pseudo]['Surname']
             if 'last_h_speed' in el:
                 speed = int(el['last_h_speed'])
             else:
@@ -130,8 +122,8 @@ def parseData(infolist):
             pilot = PilotsStatus[pseudo]
         
             # evaluate status of this pilot
-            print("==  ITEM  ==================================",file=logfile, flush=True)
-            print(el,file=logfile, flush=True)
+            printlog("==  ITEM  ==================================")
+            printlog(el)
             (pilot,al) = checkPilot(pilot,el)
             alarm += al
         
@@ -161,52 +153,52 @@ def checkPilot(ps,cur):
     # rough distance calculation (in meter) from gps dec coord and altitude    
     distm = calcDistm(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
         cur['last_latitude'], cur['last_longitude'], cur['last_altitude'])
-    print("Step= %d m" % distm,file=logfile, flush=True)
+    printlog("Step= "+str(dist))
     
     deltaTime=int(cur['last_position_utc_timestamp_unix'])-int(ps['last_postime'])
-    print("DeltaT= %d s" % deltaTime,file=logfile, flush=True)
+    printlog("DeltaT= "+str(deltaTime))
 
     if ps['new']:            
         #first log, do not check.
         ps.update({"new": 0})
-        print("first log, skip check",file=logfile, flush=True)
+        printlog("first log, skip check")
     else:   
         if deltaTime==0:
-            print("log not new, skip check",file=logfile, flush=True)
+            printlog("log not new, skip check")
         else:
             # if speed is available, use speed to detect takeoff
             if 'last_h_speed' in cur:
                 
                 last_h_speed = int(cur['last_h_speed'])
                 ps.update({"last_h_speed": last_h_speed})
-                print("Speed= %d km/h" % last_h_speed,file=logfile, flush=True)
+                printlog("Speed= "+str(last_h_speed))
                 # detect takeoff: speed of 10km/h
                 if ps['TakeOff']==0:
-                    if (last_h_speed > int(params['VitMinDeco'])): tof = 1
+                    if (last_h_speed > int(getParam('VitMinDeco'))): tof = 1
                         
             # in addition use distance from last record
             # detect takeoff: move of 10m
             if ps['TakeOff']==0:
-                if (distm > int(params['StepMinDeco'])): tof = 1
+                if (distm > int(getParam('StepMinDeco'))): tof = 1
             
             else:
-                if (distm < int(params['StepMaxPose'])): lan = 1
+                if (distm < int(getParam('StepMaxPose'))): lan = 1
                 
                 # sometimes step is null but speed is not
                 if 'last_h_speed' in cur:
-                    if last_h_speed > int(params['VitMinDeco']): lan = 0
+                    if last_h_speed > int(getParam('VitMinDeco')): lan = 0
             
             if tof:
                 ps.update({'TakeOff': 1})
-                print("Pilot %s takeoff V" % cur['pseudo'],file=logfile, flush=True)
+                printlog("Pilot "+cur['pseudo'])
              
             if lan:
                 ps.update({'Landed': 1})
-                print("Pilot %s landed" % cur['pseudo'],file=logfile, flush=True)
+                printlog("Pilot "+cur['pseudo'])
 
             # pilot landed but not cleared
             if (ps['Landed'] and ps['Cleared']==0):
-                print("ALARM ! Pilot %s" % cur['pseudo'],file=logfile, flush=True)
+                printlog("ALARM ! Pilot "+cur['pseudo'])
                 alarm = 1
         
 
@@ -223,13 +215,12 @@ def checkPilot(ps,cur):
 # -----------------------------------------------
 def isPilotTooFar(elem):
    
-    global params
-    lat = params['Latitude']
-    lon = params['Longitude']    
+    lat = getParam('Latitude').strip()
+    lon = getParam('Longitude').strip() 
     if len(lon) and len(lat):
         distkm = calcDistKm(lat, lon, elem['last_latitude'], elem['last_longitude'])
-        if distkm > float(params['MaxDistance']):
-            print("%s pilot too far %d" % (elem['pseudo'], int(distkm)),file=logfile, flush=True)
+        if distkm > float(getParam('MaxDistance')):
+            printlog(elem['pseudo']+" pilot too far "+str(int(distkm)))
             return((1,distkm))
         else:
             return((0,distkm))
@@ -278,9 +269,10 @@ def calcDistKm(x1,y1,x2,y2):
 # -----------------------------------------------
 def loadPilotTable():   
     
-    global PilotsStatus
-    if os.path.isfile(PILOTS_STATUS):
-        with open(PILOTS_STATUS, 'r') as in_file:
+    global FILES, PilotsStatus
+    
+    if os.path.isfile(FILES['pilotsStatus']):
+        with open(FILES['pilotsStatus'], 'r') as in_file:
             content = in_file.read()
             in_file.close()
             if len(content):
@@ -289,14 +281,16 @@ def loadPilotTable():
                 PilotsStatus = {}
     else:
         PilotsStatus = {}
-    
+
+   
 # -----------------------------------------------
 # save pilot table in backup file
 # -----------------------------------------------
 def savePilotTable():   
     
-    global PilotsStatus
-    with open(PILOTS_STATUS, 'w') as out_file:
+    global FILES, PilotsStatus
+    
+    with open(FILES['pilotsStatus'], 'w') as out_file:
         json.dump(PilotsStatus, out_file, indent = 4, sort_keys=True)
         out_file.close()      
     
@@ -342,6 +336,7 @@ def clearPilotStatus(p):
     
     PilotsStatus[p]=elem
     updatePilotTable()
+    savePilotTable()
         
 # -----------------------------------------------
 # locate pilot on map
@@ -349,203 +344,220 @@ def clearPilotStatus(p):
 def locatePilot(p):   
     
     global PilotsStatus
+    
     lat = PilotsStatus[p]['last_lat']
     lon = PilotsStatus[p]['last_lon']
     url = "https://www.spotair.mobi/?lat="+str(lat)+"&lng="+str(lon)+"&zoom=15"
     command = 'firefox  --new-window \"'+url+'\" &'
-    print(command,file=logfile, flush=True)    
+    printlog(command)    
     os.system(command)
     
-# ----------------------------------------------------------
-#
-# proc readParameterConfig
-#   load the config of parameters instruments
-#   set the config global
-# ----------------------------------------------------------
-def readParameterConfig():
-    
-    global paramconfigfile, config
-    f=paramconfigfile
-    
-    with open(f) as f:
-        config = json.load(f)
 
-#     config = {
-#     "parameters": [
-#         {
-#             "name": "Filtrage",
-#             "type": "string",
-#             "method": "radio",
-#             "list": ["Fichier", "Distance", "Aucun"],
-#             "def": "Fichier",
-#             "descr": "Filtrage par fichier, par la distance a l'atterrissage, ou pas de filtre"
-#         },
-#         {
-#             "name": "MaxDistance",
-#             "type": "string",
-#             "method": "entry",
-#             "def": "50",
-#             "descr": "Filtrage des pilotes a une distance inferieure a cette valeur en km"
-#         },
-#         {
-#             "name": "VitMinDeco",
-#             "type": "string",
-#             "method": "entry",
-#             "def": "10",
-#             "descr": "Vitesse minimale pour detecter le deco (si vitesse reportee)"
-#         },
-#         {
-#             "name": "StepMinDeco",
-#             "type": "string",
-#             "method": "entry",
-#             "def": "10",
-#             "descr": "Variation de position (en m) minimale pour detecter le mode vol"
-#         },
-#         {
-#             "name": "StepMaxPose",
-#             "type": "string",
-#             "method": "entry",
-#             "def": "5",
-#             "descr": "Variation de position (en m) maximale pour detecter le mode sol"
-#         },
-#         {
-#             "name": "FichierOptions",
-#             "type": "string",
-#             "method": "entry",
-#             "def": "~/.tracker.options",
-#             "descr": "Fichier de sauvegarde des options utilisateur"
-#         },
-#         {
-#             "name": "FichierPilotes",
-#             "type": "string",
-#             "method": "entry",
-#             "def": "~/.tracker.pilots",
-#             "descr": "Fichier de sauvegarde des positions pilotes"
-#         },
-#         {
-#             "name": "FichierLog",
-#             "type": "string",
-#             "method": "entry",
-#             "def": "~/.tracker.log",
-#             "descr": "Fichier log"
-#         }
-#         
-#     ],
-#     "spots": [
-#         {
-#             "name": "custom",
-#             "Longitude":  "",
-#             "Latitude":  "",
-#             "Altitude":  "",
-#             "descr": "Spot custom"
-#         },    
-#         {
-#             "name": "Arbas Attero",
-#             "Longitude":  0.904557,
-#             "Latitude":  42.990937,
-#             "Altitude":  420,
-#             "descr": "Atterrissage Arbas"
-#         },
-#         {
-#             "name": "Val Louron Attero",
-#             "Longitude":  0.405442,
-#             "Latitude":  42.802246,
-#             "Altitude":  951,
-#             "descr": "Atterrissage VL"
-#         },
-#         {
-#             "name": "Doussard",
-#             "Longitude":  6.222322,
-#             "Latitude":  45.781463,
-#             "Altitude":  466,
-#             "descr": "Atterrissage Anncey"
-#         },
-#         {
-#             "name": "Lumbin",
-#             "Longitude":  5.906357,
-#             "Latitude":  45.302509,
-#             "Altitude":  230,
-#             "descr": "Atterrissage St Hil"
-#         }
-#     ]
-# }
 
-        
 
 # ----------------------------------------------------------
 # 
-# proc loadParams
-#   load the parameters file
+# proc loadConfig
+#   read from the config file
 # 
 # ----------------------------------------------------------
-def loadParams():
+def loadConfig():
 
-    global paramstatusfile, params
-    f=paramstatusfile
+    global FILES, config
 
-    # read the file
-    if os.path.isfile(f):
-        with open(f) as f:
-            params = json.load(f)
-        f.close()    
+    f = FILES['config']
+    if (os.path.isfile(f) and os.path.getsize(f)>0):
+        # read the config file
+        with open(f, 'r') as in_file:
+            config = json.load(in_file)
+            in_file.close()
+    
     else:
-        # Create structure
-        params = {}
+        config = \
+{
+    "parameters": {
+        "Filtrage": {
+            "type": "string",
+            "method": "radio",
+            "list": ["Fichier", "Distance", "Aucun"],
+            "descr": "Filtrage par fichier, par la distance a l'atterrissage, ou pas de filtre",
+            "def": "Fichier",
+            "value": "Fichier"
+        },
+        "MaxDistance": {
+            "type": "string",
+            "method": "entry",
+            "descr": "Filtrage des pilotes a une distance inferieure a cette valeur en km",
+            "def": "50",
+            "value": "50"
+        },
+        "VitMinDeco": {
+            "type": "string",
+            "method": "entry",
+            "descr": "Vitesse minimale pour detecter le deco (si vitesse reportee)",
+            "def": "10",
+            "value": "10"
+        },
+        "StepMinDeco": {
+            "type": "string",
+            "method": "entry",
+            "descr": "Variation de position (en m) minimale pour detecter le mode vol",
+            "def": "10",
+            "value": "10"
+        },
+        "StepMaxPose": {
+            "type": "string",
+            "method": "entry",
+            "descr": "Variation de position (en m) maximale pour detecter le mode sol",
+            "def": "5",
+            "value": "5"
+        },
+        "Editeur": {
+            "type": "string",
+            "method": "entry",
+            "descr": "Outil pour editer les fichiers texte",
+            "def": "nedit",
+            "value": "nedit"
+        },
+        "pilotfile": {
+            "type": "string",
+            "visib": 0,
+            "descr": "Fichier csv des pilotes",
+            "def": "select a file",
+            "value": "select a file"
+        },
+        "ffvl_url": {
+            "type": "string",
+            "visib": 0,
+            "descr": "URL data",
+            "def"  : "https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp=",
+            "value": "https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp="
+        },
+        "RefreshPeriod": {
+            "type": "string",
+            "method": "entry",
+            "visib": 1,
+            "descr": "Periode de recuperation des donnees de tracking (s)",
+            "def"  : "60",
+            "value": "60"
+        },
+        "spot": {
+            "type": "string",
+            "visib": 0,
+            "descr": "Pre-selection du spot",
+            "def": "custom",
+            "value": "custom"
+        },
+        "Latitude": {
+            "type": "string",
+            "visib": 0,
+            "descr": "Latitude du spot",
+            "def": "",
+            "value": " "
+        },
+        "Longitude": {
+            "type": "string",
+            "visib": 0,
+            "descr": "Longitude du spot",
+            "def": "",
+            "value": " "
+        },
+        "Altitude": {
+            "type": "string",
+            "visib": 0,
+            "descr": "Altitude du spot",
+            "def": "",
+            "value": " "
+        },
+        
+    },
+    "spots": {
+        "custom": {
+            "Longitude":  "",
+            "Latitude":  "",
+            "Altitude":  "",
+            "descr": "Spot custom"
+        },    
+        "Arbas Attero": {
+            "Longitude":  0.904557,
+            "Latitude":  42.990937,
+            "Altitude":  420,
+            "descr": "Atterrissage Arbas"
+        },
+        "Val Louron Attero": {
+            "Longitude":  0.405442,
+            "Latitude":  42.802246,
+            "Altitude":  951,
+            "descr": "Atterrissage VL"
+        },
+        "Doussard": {
+            "Longitude":  6.222322,
+            "Latitude":  45.781463,
+            "Altitude":  466,
+            "descr": "Atterrissage Anncey"
+        },
+        "Lumbin": {
+            "Longitude":  5.906357,
+            "Latitude":  45.302509,
+            "Altitude":  230,
+            "descr": "Atterrissage St Hil"
+        }
+    }
+        }
     
-    return() 
-
-
 # ----------------------------------------------------------
 # 
-# proc writeParams
-#   store the parameters file
+# proc writeConfig
+#   store confid into config file
 # 
 # ----------------------------------------------------------
-def writeParams(params):
+def writeConfig():
 
-    global paramstatusfile
-    f=paramstatusfile
+    global FILES, config
 
     # write the status file
-    with open(f, 'w') as out_file:
-        json.dump(params, out_file, indent = 4, sort_keys=True)
+    with open(FILES['config'], 'w') as out_file:
+        json.dump(config, out_file, indent = 4, sort_keys=True)
         out_file.close()
 
 # -----------------------------------------------
-# Utilities
+# extract params from GUI and store them into
+# the config table
 # -----------------------------------------------   
 def saveParam():   
     
-    global params       # preload defaults
-    for el in widgets['paramTab']:
-        params[el]=widgets['paramTab'][el].get()  # extract value from object
-    
-    writeParams(params)
-#     widgets['saveButtonParam'].configure(bg=defaultbg)
+    global config       
 
+    for el in widgets['paramTab']:
+        item = config['parameters'][el]
+        item['value'] = widgets['paramTab'][el].get()  # extract value from object
+        config['parameters'][el] = item
+    
+    writeConfig()
+    
 # -----------------------------------------------
 # Utility to get a param value
 #    if param is not saved, get default from config
 # -----------------------------------------------   
 def getParam(parname):   
 
-    global config, params
-    for el in config['parameters']:
-        if el['name'] == parname:
-            value = el['def']
-    if parname in params: value = params[parname]
-    return(value)
+    global config
+    
+    elem = config['parameters'][parname]
+    val = elem['def']
+    if len(elem['value']): val = elem['value']
+    return(val)
     
 # -----------------------------------------------
 # fetch data and parse
 # -----------------------------------------------
 def fetchAndParse():
 
-    print("\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n",file=logfile, flush=True)
+    printlog('\n' + '+'*50 + '\n')
     # begin to grab info
     infolist = fetchDatabase()
     if infolist is None: 
-        print("fetch is void",file=logfile, flush=True)    
+        printlog("fetch is void")    
     else:
         # filter and parse data
         parseData(infolist)
@@ -580,7 +592,7 @@ def generalUpdater():
     
     fetchAndParse()
     updatePilotTable()
-    root.after(REFRESH_PERIOD*1000,generalUpdater)
+    root.after(int(getParam('RefreshPeriod'))*1000,generalUpdater)
     
 # -----------------------------------------------
 # reset pilot status file
@@ -588,6 +600,7 @@ def generalUpdater():
 def resetPilotStatus ():
     
     global PilotsStatus
+    
     PilotsStatus = {}
     savePilotTable()  
     
@@ -726,8 +739,8 @@ def createPilotTable(parent):
     parent.create_window((0,25), window=pilottabframe, anchor='nw')    
     widgets['panel']['pilot'] = pilottabframe
 
-    lat = params['Latitude']
-    lon = params['Longitude']    
+    lat = getParam('Latitude')
+    lon = getParam('Longitude')   
     if len(lat) and len(lon): 
         distcol = 1
     else: 
@@ -818,7 +831,8 @@ def updatePilotTable():
 # -----------------------------------------------
 def createParametersPanel(nb):   
     
-    global PILOTS_FILE, params
+    global FILES, config
+    
     frame=ttk.Frame(nb)
     frame.pack()
     nb.add(frame, text="Parametres", padding='2mm')
@@ -839,11 +853,10 @@ def createParametersPanel(nb):
     fileframe.pack(side='top',fill='both', expand=0)
     Label(fileframe, relief='flat', bd=1, text="Fichier",width=15).pack(side='left')
     sv = tk.StringVar()
-    if 'pilotfile' in params: PILOTS_FILE=params['pilotfile']
-    sv.set(PILOTS_FILE)
+    FILES['pilotsFilter']=getParam('pilotfile')
+    sv.set(FILES['pilotsFilter'])
     widgets['filesel']=sv
     widgets['paramTab']['pilotfile']=sv
-    if 'pilotfile' in params: PILOTS_FILE=params['pilotfile']
     l=Label(fileframe, relief='sunken', bd=1, font=font_ital, textvariable=sv,width=80)
     l.pack(side='left')
     widgets['filelab']=l
@@ -862,11 +875,14 @@ def createParametersPanel(nb):
     spotlist = getSpotList()
     widgets['strvar']['ld'] = tk.StringVar()
     widgets['strvar']['ld'].set(spotlist[0])
-    if 'spot' in params: widgets['strvar']['ld'].set(params['spot'])
+    widgets['strvar']['ld'].set(getParam('spot'))
     widgets['paramTab']['spot'] = widgets['strvar']['ld']
     landsel = OptionMenu(menuframe, widgets['strvar']['ld'], *spotlist, command=updSpotEntry)
     landsel.config(width=25)    
     landsel.grid(column=2, row=1, padx=1, pady=1)
+    svb=Button(menuframe,relief='raised', bd=3,text="Renommer",height=1, command=saveSpot)
+    svb.grid(column=3, row=1, padx=1, pady=1)
+       
     rwnbr = 1
     for item in ['Latitude', 'Longitude', 'Altitude']:
         rwnbr+=1
@@ -874,7 +890,8 @@ def createParametersPanel(nb):
         widgets['paramTab'][item] = widgets['strvar'][item]
         Label(menuframe, relief='flat', bd=1, text=item,width=15).grid(column=1, row=rwnbr, padx=1, pady=1)
         ttk.Entry(menuframe, textvariable=widgets['strvar'][item], width=30).grid(column=2, row=rwnbr, padx=1, pady=1) 
-        if item in params: widgets['strvar'][item].set(params[item])
+        widgets['strvar'][item].set(getParam(item))
+    
     
     # - options section
     Label(frame, relief='groove', font=font_subtitle, bd=1, bg='#d9d98c',anchor='w', text="Options",width=1000).pack(side='top')
@@ -900,10 +917,7 @@ def createParametersPanel(nb):
 # -----------------------------------------------
 def createParamsTable(parent):
     
-    global params, config
-
-    # no more needed params = loadParams()
-    widgets['prevParams']=params    # store current parameters 
+    global config
     
     # store this object for future destroy/refresh
     widgets['paramsparentframe']=parent
@@ -921,23 +935,18 @@ def createParamsTable(parent):
 
     # Table body creation
     rownbrr=1
-    for elem in config['parameters']:
+    for name in config['parameters']:
+        elem = config['parameters'][name]
         if (('visib' in elem) and (not elem['visib'])): continue
-        name=elem['name']
         Cell(paramstabframe,x=0,y=rownbrr,defval=name, w=15, options={'height': 2} )            # Id column
         
-        value=""
-        if 'def' in elem:
-            value=elem['def']
-            descrip = elem['descr'] + " (def. " + str(value) + ")"
-        else:
-            descrip = elem['descr']
+        value=elem['def']
+        descrip = elem['descr'] + " (def. " + str(value) + ")"
             
-        if name in params:
-            value=params[name]
-                
-        typ=elem['type']
-        met=elem['method']
+        value = elem['value']
+        if not len(value): value = elem['def']             
+        typ = elem['type']
+        met = elem['method']
         options={}
         if met=='scale':
             options={'length': 270}
@@ -981,17 +990,38 @@ def updSpotEntry(W):
     for item in ['Latitude', 'Longitude', 'Altitude']:
         widgets['strvar'][item].set(elem[item])
 
-
+# -----------------------------------------------
+# utility for spot selection
+# -----------------------------------------------
+def saveSpot():
+    
+    global config
+    
+    userInput = simpledialog.askstring(title="Renommer ce spot",
+                prompt="Nom du spot:")
+       
+    newspot = {}
+    for item in ['Latitude', 'Longitude', 'Altitude']:
+        value = widgets['strvar'][item].get()
+        newspot[item] = value       
+    
+    widgets['strvar']['ld'].set(userInput)
+    config['spots'][userInput] = newspot
+    
+    writeConfig()
+    
+    
 # -----------------------------------------------
 # utility for file selection
 # -----------------------------------------------
 def selectFile():
 
-    global PILOTS_FILE
+    global FILES
+    
     ret = filedialog.askopenfilename()
     if len(ret):
-        PILOTS_FILE = ret
-        widgets['filesel'].set(PILOTS_FILE)
+        FILES['pilotsFilter'] = ret
+        widgets['filesel'].set(ret)
         widgets['filelab'].configure(font=font_def)
 
 # -----------------------------------------------
@@ -999,8 +1029,9 @@ def selectFile():
 # -----------------------------------------------
 def editFile():
 
-    global PILOTS_FILE, params
-    command = getParam('Editeur') + ' ' + PILOTS_FILE
+    global FILES
+    
+    command = getParam('Editeur') + ' ' + FILES['pilotsFilter']
     os.system(command)
 
 
@@ -1010,10 +1041,10 @@ def editFile():
 def getSpotList():
     
     global config
+    
     outlist = []
     for elem in config['spots']:
-        name=elem['name']
-        outlist.append(name)
+        outlist.append(elem)
     return(outlist)
 
 # -----------------------------------------------
@@ -1022,29 +1053,63 @@ def getSpotList():
 def getCoord(spot):
     
     global config
-    outlist = []
-    for elem in config['spots']:
-        if elem['name']==spot:
-            return(elem)
-
-
-
-
-
-
-
-
-
-
-
-def getgeom(W):
     
-    print("Geom")
-    print("The width of Tkinter window:", root.winfo_width())
-    print("The height of Tkinter window:", root.winfo_height())     
-#     print("Screen")
-#     print("The width of Tkinter window:", root.winfo_screenwidth())
-#     print("The height of Tkinter window:", root.winfo_screenheight())     
+    if spot in config['spots']:
+        return(config['spots'][spot])
+    else:
+        return()
+
+
+# -----------------------------------------------
+# manage log messages
+# -----------------------------------------------
+def printlog(mess):
+
+    global FILES
+    print(mess,file=FILES['logFD'], flush=True)
+    
+    
+# -----------------------------------------------
+# initiate working dirs
+# -----------------------------------------------
+def initDirs():
+    
+    global FILES
+    
+    toolHomeDir = os.environ['HOME'] + "/.config/tracker"
+    logFile     = toolHomeDir + "/tracker.log"
+    FILES = {}
+    FILES['config']  = toolHomeDir + "/tracker.config"
+    FILES['pilotsStatus'] = toolHomeDir + "/tracker.pilots"
+    FILES['pilotsFilter'] = "select a file"
+
+    # toolHomeDir
+    if not os.path.isdir(toolHomeDir):
+        print("toolHomeDir does not exist, creating")
+        try: os.makedirs(toolHomeDir)
+        except: 
+            printlog("Cannot write to "+toolHomeDir)
+            exit(1)
+
+    FILES['logFD'] = open(logFile,'w')
+
+
+
+# -----------------------------------------------
+# -----------------------------------------------
+# def getgeom(W):
+#     
+#     printlog("Geom")
+#     printlog("The width of Tkinter window:", root.winfo_width())
+#     printlog("The height of Tkinter window:", root.winfo_height())     
+#     printlog("Screen")
+#     printlog("The width of Tkinter window:", root.winfo_screenwidth())
+#     printlog("The height of Tkinter window:", root.winfo_screenheight())     
+
+
+
+
+
     
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
@@ -1055,19 +1120,14 @@ def getgeom(W):
 # ------------------------------------------------------------------------------
 # def
 execpath=os.path.dirname(sys.argv[0])
-paramconfigfile = execpath+"/.config"
-paramstatusfile = os.environ['HOME']+"/.tracker.options"
-logfile         = os.environ['HOME']+"/.tracker.log"
-PILOTS_STATUS   = os.environ['HOME']+"/.tracker.pilots"
-PILOTS_FILE     = "select a file"
-
-logfile = open(logfile,'w')
-
 
 # init
-dt_string = datetime.now().strftime("%H:%M:%S")
+initDirs()
 
-geometry="1400x700"
+dt_string = datetime.now().strftime("%H:%M:%S")
+printlog('='*80+'\nStarting '+dt_string)
+
+geometry = "1400x700"
 root = tk.Tk()
 root.title("Race Tracker")
 root.geometry(geometry)
@@ -1075,9 +1135,9 @@ root.geometry(geometry)
 
 nb = ttk.Notebook(root)   # Creation du systeme d'onglets
 nb.pack(fill=BOTH,expand=1)
-defaultbg = root.cget('bg')  #  #d9d9d9
 
 # cosmetic details
+defaultbg = root.cget('bg')  #  #d9d9d9
 font_def    = tkFont.Font(family='Helvetica', size=12)
 font_header = tkFont.Font(family='Helvetica', size=12, weight='bold') #weight='bold'
 font_but1   = tkFont.Font(family='Helvetica', size=11, weight='bold') #weight='bold'
@@ -1085,7 +1145,7 @@ font_title  = tkFont.Font(family='Helvetica', size=16, weight='bold')
 font_subtitle  = tkFont.Font(family='Helvetica', size=13, weight='bold')
 font_ital   = tkFont.Font(family='Helvetica', size=10, slant='italic')
 
-color="#a6e0c6"
+color = "#a6e0c6"
 optionsH = {'font': font_header, 'bg': "#a6e0c6", 'bd': 1, 'relief': 'groove' }
 optionsC = {'font': font_def, 'bd': 1, 'relief': 'groove' }
 optionsDescr = {'font': font_def, 'bd': 1, 'relief': 'groove', 'anchor': 'w' }
@@ -1107,21 +1167,13 @@ widgets['filesel'] = {}
 widgets['strvar'] = {}
 widgets['canvas'] = {}
 
+loadConfig()
+
 session = HTMLSession()
-
-loadParams()
-print("current params",file=logfile, flush=True)
-print(params,file=logfile, flush=True)
-
-readParameterConfig()
 
 createParametersPanel(nb)
 
 root.update()
-
-# Start recurrent process
-# -----------------------------------------------
-# generalUpdater()
 
 root.mainloop()
 
