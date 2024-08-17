@@ -382,6 +382,7 @@ def loadConfig():
             "list": ["Fichier", "Distance", "Aucun"],
             "descr": "Filtrage par fichier, par la distance a l'atterrissage, ou pas de filtre",
             "def": "Fichier",
+            "row": 1,
             "value": "Fichier"
         },
         "MaxDistance": {
@@ -389,6 +390,7 @@ def loadConfig():
             "method": "entry",
             "descr": "Filtrage des pilotes a une distance inferieure a cette valeur en km",
             "def": "50",
+            "row": 2,
             "value": "50"
         },
         "VitMinDeco": {
@@ -396,6 +398,7 @@ def loadConfig():
             "method": "entry",
             "descr": "Vitesse minimale pour detecter le deco (si vitesse reportee)",
             "def": "10",
+            "row": 3,
             "value": "10"
         },
         "StepMinDeco": {
@@ -403,6 +406,7 @@ def loadConfig():
             "method": "entry",
             "descr": "Variation de position (en m) minimale pour detecter le mode vol",
             "def": "10",
+            "row": 4,
             "value": "10"
         },
         "StepMaxPose": {
@@ -410,66 +414,67 @@ def loadConfig():
             "method": "entry",
             "descr": "Variation de position (en m) maximale pour detecter le mode sol",
             "def": "5",
+            "row": 5,
             "value": "5"
+        },
+        "RefreshPeriod": {
+            "type": "string",
+            "method": "entry",
+            "row": 6,
+            "descr": "Periode de recuperation des donnees de tracking (s)",
+            "def"  : "60",
+            "value": "60"
         },
         "Editeur": {
             "type": "string",
             "method": "entry",
             "descr": "Outil pour editer les fichiers texte",
             "def": "nedit",
+            "row": 7,
             "value": "nedit"
         },
         "pilotfile": {
-            "type": "string",
             "visib": 0,
+            "type": "string",
             "descr": "Fichier csv des pilotes",
             "def": "select a file",
             "value": "select a file"
         },
         "ffvl_url": {
-            "type": "string",
             "visib": 0,
+            "type": "string",
             "descr": "URL data",
             "def"  : "https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp=",
             "value": "https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp="
         },
-        "RefreshPeriod": {
-            "type": "string",
-            "method": "entry",
-            "visib": 1,
-            "descr": "Periode de recuperation des donnees de tracking (s)",
-            "def"  : "60",
-            "value": "60"
-        },
         "spot": {
-            "type": "string",
             "visib": 0,
+            "type": "string",
             "descr": "Pre-selection du spot",
             "def": "custom",
             "value": "custom"
         },
         "Latitude": {
-            "type": "string",
             "visib": 0,
+            "type": "string",
             "descr": "Latitude du spot",
             "def": "",
             "value": " "
         },
         "Longitude": {
-            "type": "string",
             "visib": 0,
+            "type": "string",
             "descr": "Longitude du spot",
             "def": "",
             "value": " "
         },
         "Altitude": {
-            "type": "string",
             "visib": 0,
+            "type": "string",
             "descr": "Altitude du spot",
             "def": "",
             "value": " "
-        },
-        
+        }
     },
     "spots": {
         "custom": {
@@ -934,11 +939,11 @@ def createParamsTable(parent):
     options={'height': 2}
 
     # Table body creation
-    rownbrr=1
     for name in config['parameters']:
         elem = config['parameters'][name]
         if (('visib' in elem) and (not elem['visib'])): continue
-        Cell(paramstabframe,x=0,y=rownbrr,defval=name, w=15, options={'height': 2} )            # Id column
+        rownbr = elem['row']
+        Cell(paramstabframe,x=0,y=rownbr,defval=name, w=15, options={'height': 2} )            # Id column
         
         value=elem['def']
         descrip = elem['descr'] + " (def. " + str(value) + ")"
@@ -953,19 +958,19 @@ def createParamsTable(parent):
             options['from_']=elem['from']
             options['to']=elem['to']
             options['resolution']=elem['res']
-            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, w=30, wtype='scale', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='scale', options=options) # Status column
             widgets['paramTab'][name]=c.entry
        
         elif met=='radio':
-            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, togvals=elem['list'], w=30, wtype='radio', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, togvals=elem['list'], w=30, wtype='radio', options=options) # Status column
             widgets['paramTab'][name]=c.sv   # 
         
         elif met=='entry':
-            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, w=30, wtype='ent', options=options) 
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='ent', options=options) 
             widgets['paramTab'][name]=c.sv   # 
 
         elif met=='label':
-            c=Cell(paramstabframe,x=1,y=rownbrr,defval=value, w=30, wtype='lab', options=options) 
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='lab', options=options) 
             widgets['paramTab'][name]=c.sv   # 
 
         elif wtype=="tog":
@@ -976,8 +981,7 @@ def createParamsTable(parent):
             self.sv.set(defval)
             self.entry = tk.Button(self.master, textvariable=self.sv, command=self.OnClick, width=17, text=defval, padx=0, pady=1.5)   #bg="red", fg="blue",
         
-        Cell(paramstabframe,x=2,y=rownbrr,defval=descrip, options={'font': font_def, 'anchor': 'w'}, w=100) # Descr column
-        rownbrr+=1
+        Cell(paramstabframe,x=2,y=rownbr,defval=descrip, options={'font': font_def, 'anchor': 'w'}, w=100) # Descr column
 
 
 # -----------------------------------------------
