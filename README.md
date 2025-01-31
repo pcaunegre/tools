@@ -27,3 +27,7 @@ Example:\
   I want to filter days with more that 10 flights of 50km at Forclaz for 2022:
 
   extractCFD.py -deco 10 -an 2022 -minkm 50 -minfl 10 -out Forclaz2022 -html
+
+## tracker.py : a tool to monitor pilots and send automatically an alert if they unexpectidly stop flying
+
+tracker.py : parse CFD data base to extract days of flight\
