@@ -15,6 +15,12 @@
 # requires:
 #   
 #    sudo apt-get install python3-tk
+#    pip3 install requests_html
+# 
+# 
+
+
+
 
 import sys
 import os
@@ -23,15 +29,24 @@ import time
 import csv
 import json
 import re
-from requests_html import HTMLSession
 from math import *
-
-from tkinter import *
-from tkinter import ttk
-from tkinter import filedialog
-from tkinter import simpledialog
-import tkinter as tk
-import tkinter.font as tkFont
+try:
+    from requests_html import HTMLSession
+except:
+    print("requests_html lib missing\nplease run:\n   pip3 install requests_html")
+    exit(0)
+    
+    
+try:
+    from tkinter import *
+    from tkinter import ttk
+    from tkinter import filedialog
+    from tkinter import simpledialog
+    import tkinter as tk
+    import tkinter.font as tkFont
+except:
+    print("tkinter lib missing\nplease run:\n   sudo apt-get install python3-tk")
+    exit(0)
 
 
 # ------------------------------------------------------------------------------
