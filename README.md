@@ -28,6 +28,6 @@ Example:\
 
   extractCFD.py -deco 10 -an 2022 -minkm 50 -minfl 10 -out Forclaz2022 -html
 
-## tracker.py : a tool to monitor pilots and send automatically an alert if they unexpectidly stop flying
+## tracker.py race tracker
 
-tracker.py : parse CFD data base to extract days of flight\
+tracker.py :  a tool to monitor pilots and send automatically an alert if they unexpectidly stop flying
