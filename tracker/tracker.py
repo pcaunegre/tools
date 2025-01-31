@@ -11,6 +11,10 @@
 # Licence: CC-BY-NC-SA
 # ------------------------------------------------------------------------------
 
+# 
+# requires:
+#   
+#    sudo apt-get install python3-tk
 
 import sys
 import os
@@ -1071,6 +1075,7 @@ def printlog(mess):
 
     global FILES
     print(mess,file=FILES['logFD'], flush=True)
+    print(mess, flush=True)
     
     
 # -----------------------------------------------
@@ -1089,11 +1094,12 @@ def initDirs():
 
     # toolHomeDir
     if not os.path.isdir(toolHomeDir):
-        print("toolHomeDir does not exist, creating")
+        print("toolHomeDir does not exist, creating : "+toolHomeDir)
         try: os.makedirs(toolHomeDir)
         except: 
-            printlog("Cannot write to "+toolHomeDir)
+            print("Cannot write to "+toolHomeDir)
             exit(1)
+    else: print("toolHomeDir : "+toolHomeDir)
 
     FILES['logFD'] = open(logFile,'w')
 
