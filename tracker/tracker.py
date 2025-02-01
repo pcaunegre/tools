@@ -436,10 +436,18 @@ def loadConfig():
             "row": 5,
             "value": "5"
         },
+        "AlerteSonore": {
+            "type": "string",
+            "method": "chkb",
+            "descr": "Emettre l'alerte par un son",
+            "def": "0",
+            "row": 6,
+            "value": ""
+        },
         "RefreshPeriod": {
             "type": "string",
             "method": "entry",
-            "row": 6,
+            "row": 7,
             "descr": "Periode de recuperation des donnees de tracking (s)",
             "def"  : "60",
             "value": "60"
@@ -449,7 +457,7 @@ def loadConfig():
             "method": "entry",
             "descr": "Outil pour editer les fichiers texte",
             "def": "nedit",
-            "row": 7,
+            "row": 8,
             "value": "nedit"
         },
         "pilotfile": {
@@ -556,6 +564,7 @@ def saveParam():
         item = config['parameters'][el]
         item['value'] = widgets['paramTab'][el].get()  # extract value from object
         config['parameters'][el] = item
+        print("par extract "+el+" = "+item['value'])
     
     writeConfig()
     
@@ -614,8 +623,12 @@ def processStart():
 # -----------------------------------------------
 def generalUpdater():   
     
+    ### TODO: visu of update
+    widgets['dateLabel'].configure(bg='red')
+    root.update()
     fetchAndParse()
     updatePilotTable()
+    widgets['dateLabel'].configure(bg='blue')
     root.after(int(getParam('RefreshPeriod'))*1000,generalUpdater)
     
 # -----------------------------------------------
@@ -695,6 +708,11 @@ class Cell(ttk.Entry):
                 b.pack(side='left', expand=1)    
 #             self.entry.bind("<ButtonRelease-1>", self.ValueChanged)                   
 
+        elif wtype=="chkb":
+             # making a single check button in the cell
+             self.sv = tk.StringVar()
+             self.entry = tk.Checkbutton(self.master, text = defval, variable = self.sv, onvalue = 1, offvalue = 0, width = w )
+        
         elif wtype=="clearb":
             # making a single push button in the cell
              self.entry = tk.Button(self.master, command=self.OnPush, width=w, text=defval , padx=1, pady=1, bd=1)   #bg="red", fg="blue",
@@ -982,6 +1000,10 @@ def createParamsTable(parent):
        
         elif met=='radio':
             c=Cell(paramstabframe,x=1,y=rownbr,defval=value, togvals=elem['list'], w=30, wtype='radio', options=options) # Status column
+            widgets['paramTab'][name]=c.sv   # 
+        
+        elif met=='chkb':
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='chkb', options=options) # Status column
             widgets['paramTab'][name]=c.sv   # 
         
         elif met=='entry':
