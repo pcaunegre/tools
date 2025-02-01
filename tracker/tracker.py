@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+# -*- coding: utf-8 -*-
 
 # ------------------------------------------------------------------------------
 # tracker.py
@@ -15,8 +16,11 @@
 # requires:
 #   
 #    sudo apt-get install python3-tk
-#    pip3 install requests_html
+#    sudo apt install mpg321
+#    sudo apt install msmtp
 # 
+#    pip3 install requests_html
+#    pip3 install tplinkrouterc6u
 # 
 
 
@@ -154,9 +158,70 @@ def parseData(infolist):
     
     # TO BE REVIEWED
     if alarm: 
-        command="mpg123 --frames 50 "+execpath+"/sound.mp3"
-        os.system(command)    
+        if getParam('AlerteSonore')=="1": sendSoundAlert()
+        if getParam('AlerteSMS')=="1":    sendSmsAlert()
+        if getParam('AlerteEmail')=="1":  sendEmailAlert()
+        
     
+
+# ------------------------------------------------------------------------------
+# Accessories to send alert
+# ------------------------------------------------------------------------------
+def sendSoundAlert():
+    print("sendSoundAlert")
+    command=getParam('soundCmd')+execpath+"/sound.mp3"
+    print(command)
+    os.system(command)    
+    
+# ------------------------------------------------------------------------------
+def sendSmsAlert(mess):
+    numlist=getParam('TelPourAlerte').split(' ')
+    try:
+        from tplinkrouterc6u import (
+            TplinkRouterProvider,
+            TplinkRouter,
+            TplinkC1200Router,
+            TPLinkMRClient,
+            TPLinkDecoClient,
+            Connection
+        )
+        from logging import Logger
+    except:
+        print('Cannot work with TPLink router for sending SMS')
+        return()
+
+    try:
+        router = TplinkRouterProvider.get_client('192.168.1.1','tplPc1unegr-')
+        router.authorize()
+        for num in numlist:
+            print("sendSmsdAlert to: "+num)
+            router.send_sms(num,mess)
+        router.logout()
+    except:
+        print('Cannot work with TPLink router for sending SMS')
+    
+       
+
+# ------------------------------------------------------------------------------
+def sendEmailAlert(mess):
+    print("sendEmailAlert")
+    from email.message import EmailMessage
+    from email.utils import make_msgid
+    for dest in getParam('EmailPourAlerte').split(' '):
+        msg = EmailMessage()
+        msg['To']       = 'pascal.caunegre@free.fr'
+        msg['From']     = 'pascal.caunegre@free.fr'
+        msg['Subject']  = mess
+        msg.preamble = 'You will not see this in a MIME-aware mail reader.\n'
+        f=open("/tmp/msg",'w')
+        print(msg.as_string(),file=f)
+        command="cat /tmp/msg | msmtp " + dest + " &"
+        print("Email command: %s" % command)
+        os.system(command)
+        print("Sending email")
+
+
+
 # ------------------------------------------------------------------------------
 # check status of a pilot
 # ps : info list of pilot
@@ -396,108 +461,116 @@ def loadConfig():
 {
     "parameters": {
         "Filtrage": {
-            "type": "string",
             "method": "radio",
             "list": ["Fichier", "Distance", "Aucun"],
             "descr": "Filtrage par fichier, par la distance a l'atterrissage, ou pas de filtre",
             "def": "Fichier",
-            "row": 1,
             "value": "Fichier"
         },
         "MaxDistance": {
-            "type": "string",
             "method": "entry",
             "descr": "Filtrage des pilotes a une distance inferieure a cette valeur en km",
             "def": "50",
-            "row": 2,
             "value": "50"
         },
         "VitMinDeco": {
-            "type": "string",
             "method": "entry",
             "descr": "Vitesse minimale pour detecter le deco (si vitesse reportee)",
             "def": "10",
-            "row": 3,
             "value": "10"
         },
         "StepMinDeco": {
-            "type": "string",
             "method": "entry",
             "descr": "Variation de position (en m) minimale pour detecter le mode vol",
             "def": "10",
-            "row": 4,
             "value": "10"
         },
         "StepMaxPose": {
-            "type": "string",
             "method": "entry",
             "descr": "Variation de position (en m) maximale pour detecter le mode sol",
             "def": "5",
-            "row": 5,
             "value": "5"
         },
         "AlerteSonore": {
-            "type": "string",
             "method": "chkb",
             "descr": "Emettre l'alerte par un son",
-            "def": "0",
-            "row": 6,
+            "def": "",
+            "value": ""
+        },
+        "AlerteSMS": {
+            "method": "chkb",
+            "descr": "Emettre l'alerte par un SMS",
+            "def": "",
+            "value": ""
+        },
+        "AlerteEmail": {
+            "method": "chkb",
+            "descr": "Emettre l'alerte par un email",
+            "def": "",
+            "value": ""
+        },
+        "TelPourAlerte": {
+            "method": "entry",
+            "descr": "Nos de Tel auxquels envoyer un SMS d'alerte",
+            "def": "",
+            "value": ""
+        },
+        "EmailPourAlerte": {
+            "method": "entry",
+            "descr": "Email(s) auxquels envoyer une alerte",
+            "def": "",
             "value": ""
         },
         "RefreshPeriod": {
-            "type": "string",
             "method": "entry",
-            "row": 7,
             "descr": "Periode de recuperation des donnees de tracking (s)",
             "def"  : "60",
             "value": "60"
         },
         "Editeur": {
-            "type": "string",
             "method": "entry",
             "descr": "Outil pour editer les fichiers texte",
             "def": "nedit",
-            "row": 8,
             "value": "nedit"
+        },
+        "soundCmd": {
+            "visib": 0,
+            "descr": "Tool to play sound",
+            "def": "mpg321 --frames 50 ",
+            "value": "mpg321 --frames 50 "
         },
         "pilotfile": {
             "visib": 0,
-            "type": "string",
             "descr": "Fichier csv des pilotes",
             "def": "select a file",
             "value": "select a file"
         },
         "ffvl_url": {
             "visib": 0,
-            "type": "string",
             "descr": "URL data",
             "def"  : "https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp=",
             "value": "https://data.ffvl.fr/api/?mode=json&key=79ef8d9f57c10b394b8471deed5b25e7&ffvl_tracker_key=all&from_utc_timestamp="
         },
         "spot": {
             "visib": 0,
-            "type": "string",
             "descr": "Pre-selection du spot",
             "def": "custom",
             "value": "custom"
         },
         "Latitude": {
             "visib": 0,
-            "type": "string",
             "descr": "Latitude du spot",
             "def": "",
             "value": " "
         },
         "Longitude": {
             "visib": 0,
-            "type": "string",
             "descr": "Longitude du spot",
             "def": "",
             "value": " "
         },
         "Altitude": {
             "visib": 0,
-            "type": "string",
             "descr": "Altitude du spot",
             "def": "",
             "value": " "
@@ -615,6 +688,10 @@ def processStart():
     createPilotsPanel(nb)
     nb.select(1)  
     
+    if getParam('AlerteSonore')=="1": sendSoundAlert()
+    if getParam('AlerteSMS')=="1":    sendSmsAlert('Pilot 5 in trouble')
+    if getParam('AlerteEmail')=="1":  sendEmailAlert('Pilot 5 in trouble')
+
     #5. start the recurrent updater
     generalUpdater()
 
@@ -711,7 +788,8 @@ class Cell(ttk.Entry):
         elif wtype=="chkb":
              # making a single check button in the cell
              self.sv = tk.StringVar()
-             self.entry = tk.Checkbutton(self.master, text = defval, variable = self.sv, onvalue = 1, offvalue = 0, width = w )
+             self.sv.set(defval)
+             self.entry = tk.Checkbutton(self.master, text = defval, variable = self.sv, onvalue = 1, offvalue = "", width = w )
         
         elif wtype=="clearb":
             # making a single push button in the cell
@@ -968,26 +1046,29 @@ def createParamsTable(parent):
     paramstabframe=tk.Frame(parent)
     parent.create_window((0,0), window=paramstabframe, anchor='nw')    
 
+    valW = 40
     # Table headers creation
     Cell(paramstabframe,x=0, y=0, w=15, options=optionsH, defval='Parametre')   
-    Cell(paramstabframe,x=1, y=0, w=30, options=optionsH, defval='Valeur')   
+    Cell(paramstabframe,x=1, y=0, w=valW, options=optionsH, defval='Valeur')   
     Cell(paramstabframe,x=2, y=0, w=100, options=optionsH, defval='Description')   
 
     options={'height': 2}
 
     # Table body creation
+    rownbr = 0
     for name in config['parameters']:
         elem = config['parameters'][name]
         if (('visib' in elem) and (not elem['visib'])): continue
-        rownbr = elem['row']
+        rownbr += 1
         Cell(paramstabframe,x=0,y=rownbr,defval=name, w=15, options={'height': 2} )            # Id column
         
         value=elem['def']
-        descrip = elem['descr'] + " (def. " + str(value) + ")"
+        descrip = elem['descr']
+        if len(str(value)):
+            descrip = descrip + " (def. " + str(value) + ")"
             
         value = elem['value']
         if not len(value): value = elem['def']             
-        typ = elem['type']
         met = elem['method']
         options={}
         if met=='scale':
@@ -995,23 +1076,23 @@ def createParamsTable(parent):
             options['from_']=elem['from']
             options['to']=elem['to']
             options['resolution']=elem['res']
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='scale', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='scale', options=options) # Status column
             widgets['paramTab'][name]=c.entry
        
         elif met=='radio':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, togvals=elem['list'], w=30, wtype='radio', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, togvals=elem['list'], w=valW, wtype='radio', options=options) # Status column
             widgets['paramTab'][name]=c.sv   # 
         
         elif met=='chkb':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='chkb', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='chkb', options=options) # Status column
             widgets['paramTab'][name]=c.sv   # 
         
         elif met=='entry':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='ent', options=options) 
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='ent', options=options) 
             widgets['paramTab'][name]=c.sv   # 
 
         elif met=='label':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=30, wtype='lab', options=options) 
+            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='lab', options=options) 
             widgets['paramTab'][name]=c.sv   # 
 
         elif wtype=="tog":
