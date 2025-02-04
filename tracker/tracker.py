@@ -237,7 +237,7 @@ def checkPilot(ps,cur):
     # rough distance calculation (in meter) from gps dec coord and altitude    
     distm = calcDistm(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
         cur['last_latitude'], cur['last_longitude'], cur['last_altitude'])
-    printlog("Step= "+str(dist))
+    printlog("Step= "+str(distm))
     
     deltaTime=int(cur['last_position_utc_timestamp_unix'])-int(ps['last_postime'])
     printlog("DeltaT= "+str(deltaTime))
@@ -274,11 +274,11 @@ def checkPilot(ps,cur):
             
             if tof:
                 ps.update({'TakeOff': 1})
-                printlog("Pilot "+cur['pseudo'])
+                printlog("Pilot TakeOff "+cur['pseudo'])
              
             if lan:
                 ps.update({'Landed': 1})
-                printlog("Pilot "+cur['pseudo'])
+                printlog("Pilot Landed "+cur['pseudo'])
 
             # pilot landed but not cleared
             if (ps['Landed'] and ps['Cleared']==0):
@@ -431,7 +431,7 @@ def locatePilot(p):
     
     lat = PilotsStatus[p]['last_lat']
     lon = PilotsStatus[p]['last_lon']
-    url = "https://www.spotair.mobi/?lat="+str(lat)+"&lng="+str(lon)+"&zoom=15"
+    url = "https://www.spotair.mobi/?lat="+str(lat)+"&lng="+str(lon)+"&zoom=15&ltffvl"
     command = 'firefox  --new-window \"'+url+'\" &'
     printlog(command)    
     os.system(command)
@@ -491,23 +491,29 @@ def loadConfig():
             "def": "5",
             "value": "5"
         },
+        "maxLogTime": {
+            "method": "entry",
+            "descr": "Delai (s) depuis le dernier log au-dela duquel on emet un Warning",
+            "def": "300",
+            "value": "300"
+        },
         "AlerteSonore": {
             "method": "chkb",
             "descr": "Emettre l'alerte par un son",
-            "def": "",
-            "value": ""
+            "def": "0",
+            "value": "0"
         },
         "AlerteSMS": {
             "method": "chkb",
             "descr": "Emettre l'alerte par un SMS",
-            "def": "",
-            "value": ""
+            "def": "0",
+            "value": "0"
         },
         "AlerteEmail": {
             "method": "chkb",
             "descr": "Emettre l'alerte par un email",
-            "def": "",
-            "value": ""
+            "def": "0",
+            "value": "0"
         },
         "TelPourAlerte": {
             "method": "entry",
@@ -785,7 +791,7 @@ class Cell(ttk.Entry):
              # making a single check button in the cell
              self.sv = tk.StringVar()
              self.sv.set(defval)
-             self.entry = tk.Checkbutton(self.master, text = defval, variable = self.sv, onvalue = 1, offvalue = "", width = w )
+             self.entry = tk.Checkbutton(self.master, text = "", variable = self.sv, width = w )
         
         elif wtype=="clearb":
             # making a single push button in the cell
@@ -921,11 +927,14 @@ def updatePilotTable():
         elem=PilotsStatus[p]
         deltat = now-int(elem['last_postime'])
         (status,color) = calcStatus(elem)
+        RTwarncolor = defaultbg
+        if (deltat > int(getParam('maxLogTime'))): RTwarncolor="yellow"
         if p in widgets['pilotStat']:
             # update existing line in the table
             widgets['pilotStat'][p].sv.set(status)             # change the content of this widget
             widgets['pilotStat'][p].entry.configure(bg=color)   # change the color of this widget
             widgets['pilotRTim'][p].sv.set(deltat)
+            widgets['pilotRTim'][p].entry.configure(bg=RTwarncolor)
             widgets['pilotAlt'][p].sv.set(elem['last_alt'])
             widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
             widgets['pilotStep'][p].sv.set(elem['last_dist'])
@@ -1056,7 +1065,15 @@ def createParamsTable(parent):
         elem = config['parameters'][name]
         if (('visib' in elem) and (not elem['visib'])): continue
         rownbr += 1
-        Cell(paramstabframe,x=0,y=rownbr,defval=name, w=15, options={'height': 2} )            # Id column
+        
+        # automatic ordering fo parameters
+        if 'rownb' in elem:
+            row = elem['rownb']
+        else:
+            row = rownbr
+            elem.update({'rownb': rownbr})
+        
+        Cell(paramstabframe,x=0,y=row,defval=name, w=15, options={'height': 2} )            # Id column
         
         value=elem['def']
         descrip = elem['descr']
@@ -1072,23 +1089,23 @@ def createParamsTable(parent):
             options['from_']=elem['from']
             options['to']=elem['to']
             options['resolution']=elem['res']
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='scale', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=row,defval=value, w=valW, wtype='scale', options=options) # Status column
             widgets['paramTab'][name]=c.entry
        
         elif met=='radio':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, togvals=elem['list'], w=valW, wtype='radio', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=row,defval=value, togvals=elem['list'], w=valW, wtype='radio', options=options) # Status column
             widgets['paramTab'][name]=c.sv   # 
         
         elif met=='chkb':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='chkb', options=options) # Status column
+            c=Cell(paramstabframe,x=1,y=row,defval=value, w=valW, wtype='chkb', options=options) # Status column
             widgets['paramTab'][name]=c.sv   # 
         
         elif met=='entry':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='ent', options=options) 
+            c=Cell(paramstabframe,x=1,y=row,defval=value, w=valW, wtype='ent', options=options) 
             widgets['paramTab'][name]=c.sv   # 
 
         elif met=='label':
-            c=Cell(paramstabframe,x=1,y=rownbr,defval=value, w=valW, wtype='lab', options=options) 
+            c=Cell(paramstabframe,x=1,y=row,defval=value, w=valW, wtype='lab', options=options) 
             widgets['paramTab'][name]=c.sv   # 
 
         elif wtype=="tog":
@@ -1099,7 +1116,7 @@ def createParamsTable(parent):
             self.sv.set(defval)
             self.entry = tk.Button(self.master, textvariable=self.sv, command=self.OnClick, width=17, text=defval, padx=0, pady=1.5)   #bg="red", fg="blue",
         
-        Cell(paramstabframe,x=2,y=rownbr,defval=descrip, options={'font': font_def, 'anchor': 'w'}, w=100) # Descr column
+        Cell(paramstabframe,x=2,y=row,defval=descrip, options={'font': font_def, 'anchor': 'w'}, w=100) # Descr column
 
 
 # -----------------------------------------------
