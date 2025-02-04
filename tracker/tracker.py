@@ -208,18 +208,18 @@ def sendEmailAlert(mess):
     from email.message import EmailMessage
     from email.utils import make_msgid
     for dest in getParam('EmailPourAlerte').split(' '):
-        msg = EmailMessage()
-        msg['To']       = 'pascal.caunegre@free.fr'
-        msg['From']     = 'pascal.caunegre@free.fr'
-        msg['Subject']  = mess
-        msg.preamble = 'You will not see this in a MIME-aware mail reader.\n'
-        f=open("/tmp/msg",'w')
-        print(msg.as_string(),file=f)
-        command="cat /tmp/msg | msmtp " + dest + " &"
+        horl = datetime.now()
+        dt_string = horl.strftime("%H:%M:%S")
+        mfile = "/tmp/msg"+dt_string
+        message = "To: " + dest + "\n"
+        message += "Subject: " + mess + "\n"
+        message += mess + "\n"
+        f = open(mfile,'w')
+        print(message, file=f)
+        f.close()
+        command="cat " + mfile + " | msmtp " + dest + " "
         print("Email command: %s" % command)
         os.system(command)
-        print("Sending email")
-
 
 
 # ------------------------------------------------------------------------------
@@ -688,10 +688,6 @@ def processStart():
     createPilotsPanel(nb)
     nb.select(1)  
     
-    if getParam('AlerteSonore')=="1": sendSoundAlert()
-    if getParam('AlerteSMS')=="1":    sendSmsAlert('Pilot 5 in trouble')
-    if getParam('AlerteEmail')=="1":  sendEmailAlert('Pilot 5 in trouble')
-
     #5. start the recurrent updater
     generalUpdater()
 
