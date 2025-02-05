@@ -80,7 +80,7 @@ def loadPilotList():
 
 
 # ------------------------------------------------------------------------------
-# get info from database
+# get info from FFVL tracker database
 # ------------------------------------------------------------------------------
 def fetchDatabase():
     
@@ -106,6 +106,7 @@ def parseData(infolist):
     
     global PilotsStatus, PilotsFilter
     alarm = 0
+    
     for elem in infolist:
         el = infolist[elem]
         pseudo=el['pseudo']
@@ -141,6 +142,7 @@ def parseData(infolist):
                 "d2atter": distkm,\
                 "last_postime": el['last_position_utc_timestamp_unix'], "new": 1}
         
+        # update an existing item
         else:
             pilot = PilotsStatus[pseudo]
         
@@ -242,6 +244,9 @@ def checkPilot(ps,cur):
     deltaTime=int(cur['last_position_utc_timestamp_unix'])-int(ps['last_postime'])
     printlog("DeltaT= "+str(deltaTime))
 
+    # 
+    now = int(time.time())  
+
     if ps['new']:            
         #first log, do not check.
         ps.update({"new": 0})
@@ -250,7 +255,7 @@ def checkPilot(ps,cur):
         if deltaTime==0:
             printlog("log not new, skip check")
         else:
-            # if speed is available, use speed to detect takeoff
+            # if speed is available, use speed to detect takeoff           
             if 'last_h_speed' in cur:
                 
                 last_h_speed = int(cur['last_h_speed'])
@@ -277,8 +282,16 @@ def checkPilot(ps,cur):
                 printlog("Pilot TakeOff "+cur['pseudo'])
              
             if lan:
+
                 ps.update({'Landed': 1})
                 printlog("Pilot Landed "+cur['pseudo'])
+
+
+            # delta time between now and last log
+            deltat = now-int(elem['last_postime'])
+            RTcolor = defaultbg
+            if (deltat > int(getParam('delaiLogMax'))): RTcolor="yellow"
+            (STtext,STcolor) = calcStatus(elem)
 
             # pilot landed but not cleared
             if (ps['Landed'] and ps['Cleared']==0):
@@ -290,7 +303,13 @@ def checkPilot(ps,cur):
                  "last_lon": cur['last_longitude'],\
                  "last_dist": distm,\
                  "last_alt": int(cur['last_altitude']),\
-                 "last_postime": cur['last_position_utc_timestamp_unix']})
+                 "last_postime": cur['last_position_utc_timestamp_unix'],\
+                 "DTlog": deltat,\
+                 "DTcolor": RTcolor,\
+                 "STtext": STtext,\
+                 "STcolor": STcolor })
+                 
+                 
     return((ps,alarm))       
 
 # -----------------------------------------------
@@ -491,7 +510,7 @@ def loadConfig():
             "def": "5",
             "value": "5"
         },
-        "maxLogTime": {
+        "delaiLogMax": {
             "method": "entry",
             "descr": "Delai (s) depuis le dernier log au-dela duquel on emet un Warning",
             "def": "300",
@@ -850,7 +869,7 @@ def createPilotsPanel(nb):
 # PILOT PANEL
 # ------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------
-# Create pilots panel
+# Create pilots table
 # ------------------------------------------------------------------------------
 def createPilotTable(parent):   
     
@@ -885,14 +904,12 @@ def createPilotTable(parent):
 
     
 # -----------------------------------------------
-# Create pilots table
+# Create line of the table
 # -----------------------------------------------
 def addLineInTable(rownbr, p, elem):   
     
     f = widgets['panel']['pilot']
-    now = int(time.time())
-    deltat = now-int(elem['last_postime'])
-    (status,color) = calcStatus(elem)
+        
     Cell(f, x=0,y=rownbr, w=25, defval=p,               options=optionsC, bgc=defaultbg) 
     Cell(f, x=1,y=rownbr, w=15, defval=elem['Name'],    options=optionsC, bgc=defaultbg ) 
     Cell(f, x=2,y=rownbr, w=15, defval=elem['Surname'], options=optionsC, bgc=defaultbg ) 
@@ -904,9 +921,9 @@ def addLineInTable(rownbr, p, elem):
     widgets['pilotHs'][p]=c   # keep an handle to change the status later
     c=Cell(f, x=6,y=rownbr, w=10, defval=elem['d2atter'], options=optionsC, bgc=defaultbg ) 
     widgets['pilotDist'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=7,y=rownbr, w=15, defval=status,        options=optionsC, bgc=color ) 
+    c=Cell(f, x=7,y=rownbr, w=15, defval=elem['STtext'],        options=optionsC, bgc=elem['STcolor'] ) 
     widgets['pilotStat'][p]=c   # keep an handle to change the status later
-    c=Cell(f, x=8,y=rownbr, w=10, defval=deltat,        options=optionsC, bgc=defaultbg ) 
+    c=Cell(f, x=8,y=rownbr, w=10, defval=elem['DTlog'],        options=optionsC, bgc=elem['DTcolor'] ) 
     widgets['pilotRTim'][p]=c
     Cell(f, x=9,y=rownbr, w=10, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
     Cell(f, x=10,y=rownbr, w=10, wtype="locb",defval="Voir",pid=p, options=optionsC, bgc=defaultbg ) 
@@ -922,19 +939,15 @@ def updatePilotTable():
     dt_string = horl.strftime("%H:%M:%S")
     widgets['dateLabel'].configure(text=dt_string)
 
-    now = int(time.time())
     for p in PilotsStatus:
         elem=PilotsStatus[p]
-        deltat = now-int(elem['last_postime'])
-        (status,color) = calcStatus(elem)
-        RTwarncolor = defaultbg
-        if (deltat > int(getParam('maxLogTime'))): RTwarncolor="yellow"
+        
         if p in widgets['pilotStat']:
             # update existing line in the table
-            widgets['pilotStat'][p].sv.set(status)             # change the content of this widget
-            widgets['pilotStat'][p].entry.configure(bg=color)   # change the color of this widget
-            widgets['pilotRTim'][p].sv.set(deltat)
-            widgets['pilotRTim'][p].entry.configure(bg=RTwarncolor)
+            widgets['pilotStat'][p].sv.set(elem['STtext'])             # change the content of this widget
+            widgets['pilotStat'][p].entry.configure(bg=elem['STcolor'])   # change the color of this widget
+            widgets['pilotRTim'][p].sv.set(elem['DTlog'])
+            widgets['pilotRTim'][p].entry.configure(bg=elem['DTcolor'])
             widgets['pilotAlt'][p].sv.set(elem['last_alt'])
             widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
             widgets['pilotStep'][p].sv.set(elem['last_dist'])
