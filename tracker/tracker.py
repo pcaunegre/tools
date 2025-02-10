@@ -293,7 +293,7 @@ def checkPilot(ps,cur):
 
 
             # evaluate pilot or log time warnings            
-            (STtext,STcolor,DTcolor) = calcStatus(ps)
+            (STtext,STcolor,DTval,DTcolor) = calcStatus(ps)
 
             # pilot landed but not cleared
             if (ps['Landed'] and ps['Cleared']==0):
@@ -306,7 +306,7 @@ def checkPilot(ps,cur):
                  "last_dist": distm,\
                  "last_alt": int(cur['last_altitude']),\
                  "last_postime": cur['last_position_utc_timestamp_unix'],\
-                 "DTlog": deltat,\
+                 "DTlog": DTval,\
                  "DTcolor": DTcolor,\
                  "STtext": STtext,\
                  "STcolor": STcolor })
@@ -424,7 +424,7 @@ def calcStatus(elem):
     color2 = defaultbg
     if (deltat > int(getParam('delaiLogMax'))): color2="yellow"
     
-    return((status,color,color2))
+    return((status,color,deltat,color2))
 
 
 # -----------------------------------------------
