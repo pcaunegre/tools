@@ -140,6 +140,10 @@ def parseData(infolist):
                 "last_alt": int(el['last_altitude']), "last_lat": el['last_latitude'], \
                 "last_lon": el['last_longitude'], "last_dist": 0, "last_h_speed": speed,\
                 "d2atter": distkm,\
+                "STtext": "-",\
+                "STcolor": defaultbg,\
+                "DTlog": "-",\
+                "DTcolor": defaultbg,\
                 "last_postime": el['last_position_utc_timestamp_unix'], "new": 1}
         
         # update an existing item
@@ -244,13 +248,14 @@ def checkPilot(ps,cur):
     deltaTime=int(cur['last_position_utc_timestamp_unix'])-int(ps['last_postime'])
     printlog("DeltaT= "+str(deltaTime))
 
-    # 
-    now = int(time.time())  
-
     if ps['new']:            
         #first log, do not check.
         ps.update({"new": 0})
         printlog("first log, skip check")
+        deltat = "-"
+        DTcolor = defaultbg
+        STtext="-"
+        STcolor = defaultbg
     else:   
         if deltaTime==0:
             printlog("log not new, skip check")
@@ -287,11 +292,8 @@ def checkPilot(ps,cur):
                 printlog("Pilot Landed "+cur['pseudo'])
 
 
-            # delta time between now and last log
-            deltat = now-int(elem['last_postime'])
-            RTcolor = defaultbg
-            if (deltat > int(getParam('delaiLogMax'))): RTcolor="yellow"
-            (STtext,STcolor) = calcStatus(elem)
+            # evaluate pilot or log time warnings            
+            (STtext,STcolor,DTcolor) = calcStatus(ps)
 
             # pilot landed but not cleared
             if (ps['Landed'] and ps['Cleared']==0):
@@ -305,7 +307,7 @@ def checkPilot(ps,cur):
                  "last_alt": int(cur['last_altitude']),\
                  "last_postime": cur['last_position_utc_timestamp_unix'],\
                  "DTlog": deltat,\
-                 "DTcolor": RTcolor,\
+                 "DTcolor": DTcolor,\
                  "STtext": STtext,\
                  "STcolor": STcolor })
                  
@@ -416,7 +418,13 @@ def calcStatus(elem):
         status='Safe'
         color=defaultbg
 
-    return((status,color))
+    # delta time between now and last log
+    now = int(time.time())  
+    deltat = now-int(elem['last_postime'])
+    color2 = defaultbg
+    if (deltat > int(getParam('delaiLogMax'))): color2="yellow"
+    
+    return((status,color,color2))
 
 
 # -----------------------------------------------
@@ -483,8 +491,8 @@ def loadConfig():
             "method": "radio",
             "list": ["Fichier", "Distance", "Aucun"],
             "descr": "Filtrage par fichier, par la distance a l'atterrissage, ou pas de filtre",
-            "def": "Fichier",
-            "value": "Fichier"
+            "def": "Aucun",
+            "value": "Aucun"
         },
         "MaxDistance": {
             "method": "entry",
@@ -721,7 +729,6 @@ def processStart():
 # -----------------------------------------------
 def generalUpdater():   
     
-    ### TODO: visu of update
     widgets['dateLabel'].configure(bg='red')
     root.update()
     fetchAndParse()
@@ -895,6 +902,7 @@ def createPilotTable(parent):
         colInd+=1
     
     # table body
+    ### TBD: ordering pilot table
     rownbr=0
     for p in PilotsStatus:
         rownbr+=1
