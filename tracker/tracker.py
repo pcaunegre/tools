@@ -107,6 +107,7 @@ def parseData(infolist):
     global PilotsStatus, PilotsFilter
     alarm = 0
     
+    # 1. recording pilot info from data received
     for elem in infolist:
         el = infolist[elem]
         pseudo=el['pseudo']
@@ -153,11 +154,18 @@ def parseData(infolist):
             # evaluate status of this pilot
             printlog("==  ITEM  ==================================")
             printlog(el)
-            (pilot,al) = checkPilot(pilot,el)
-            alarm += al
+            (pilot) = updatePilotInfo(pilot,el)
         
         # recording
         PilotsStatus[pseudo] = pilot
+
+
+    # 2. now review all pilots shown in table to evaluate warnings
+    for p in PilotsStatus:
+        (pilot,al) = checkPilot(PilotsStatus[p])
+        PilotsStatus[p] = pilot
+        alarm += al
+
 
     # save infos in backup file
     savePilotTable()
@@ -229,7 +237,7 @@ def sendEmailAlert(mess):
 
 
 # ------------------------------------------------------------------------------
-# check status of a pilot
+# update info of a pilot
 # ps : info list of pilot
 # cur: current position
 # 
@@ -237,9 +245,9 @@ def sendEmailAlert(mess):
 # Landed  : has landed (no more moving after take off)
 # 
 # ------------------------------------------------------------------------------
-def checkPilot(ps,cur):
+def updatePilotInfo(ps,cur):
     
-    tof = 0; lan = 0; alarm = 0
+    tof = 0; lan = 0; 
     # rough distance calculation (in meter) from gps dec coord and altitude    
     distm = calcDistm(ps['last_lat'], ps['last_lon'], ps['last_alt'], \
         cur['last_latitude'], cur['last_longitude'], cur['last_altitude'])
@@ -292,27 +300,39 @@ def checkPilot(ps,cur):
                 printlog("Pilot Landed "+cur['pseudo'])
 
 
-            # evaluate pilot or log time warnings            
-            (STtext,STcolor,DTval,DTcolor) = calcStatus(ps)
-
-            # pilot landed but not cleared
-            if (ps['Landed'] and ps['Cleared']==0):
-                printlog("ALARM ! Pilot "+cur['pseudo'])
-                alarm = 1
-        
-
     ps.update({  "last_lat": cur['last_latitude'],\
                  "last_lon": cur['last_longitude'],\
                  "last_dist": distm,\
                  "last_alt": int(cur['last_altitude']),\
-                 "last_postime": cur['last_position_utc_timestamp_unix'],\
-                 "DTlog": DTval,\
+                 "last_postime": cur['last_position_utc_timestamp_unix'] })
+                 
+                 
+    return(ps)       
+
+
+# -----------------------------------------------
+# check a pilot 
+# 
+# -----------------------------------------------
+def checkPilot(ps):
+
+
+    alarm = 0
+    # evaluate pilot or log time warnings            
+    (STtext,STcolor,DTval,DTcolor) = calcStatus(ps)
+
+    # pilot landed but not cleared
+    if (ps['Landed'] and ps['Cleared']==0):
+        printlog("ALARM ! Pilot "+cur['pseudo'])
+        alarm = 1
+
+    ps.update({  "DTlog": DTval,\
                  "DTcolor": DTcolor,\
                  "STtext": STtext,\
                  "STcolor": STcolor })
-                 
-                 
+
     return((ps,alarm))       
+
 
 # -----------------------------------------------
 # check whether pilot is close to the playground
@@ -406,6 +426,8 @@ def savePilotTable():
 # -----------------------------------------------
 def calcStatus(elem):
 
+    print("Calc")
+    print(elem)
     status = '-'
     color = defaultbg         # default color #d9d9d9
     if elem['TakeOff']:
@@ -897,7 +919,7 @@ def createPilotTable(parent):
     # header creation
     colInd=0
     for (header,width) in [['Pseudo',25], ['Prenom',15], ['Nom',15], ['Alti',10], \
-            ['Step (m)',10], ['VitHz',7], ['Dist (km)',10],['Status',15], ['Dernier log',10], ['Clear',10], ['Loc',10]]:
+            ['Step (m)',10], ['VitHz',7], ['Dist (km)',10],['Status',15], ['Dernier log',10], ['Clairance',10], ['Loc',10]]:
         Cell(parent,x=colInd,y=0, w=width, defval=header, options=optionsH)   
         colInd+=1
     
