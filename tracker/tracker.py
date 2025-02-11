@@ -166,7 +166,6 @@ def parseData(infolist):
         PilotsStatus[p] = pilot
         alarm += al
 
-
     # save infos in backup file
     savePilotTable()
     
@@ -893,6 +892,28 @@ def createPilotsPanel(nb):
     
     createPilotTable(canv)
     
+# ------------------------------------------------------------------------------
+# orders the list of ID wrt to criteria (alert first, alphabetic...)
+# ------------------------------------------------------------------------------
+def pilotOrdering():   
+
+    global PilotsStatus
+    
+    alertlist = list()
+    warnlist = list()
+    traillist = list()
+    
+    for p in PilotsStatus:
+        item = PilotsStatus[p]
+        if item['STtext'] == "ALERT":
+            alertlist.append(p)
+        elif item['DTcolor'] == "yellow":
+            warnlist.append(p)
+        else:
+            traillist.append(p)
+    
+    return(alertlist+warnlist+traillist)
+
 
 # ------------------------------------------------------------------------------
 # PILOT PANEL
@@ -924,9 +945,8 @@ def createPilotTable(parent):
         colInd+=1
     
     # table body
-    ### TBD: ordering pilot table
     rownbr=0
-    for p in PilotsStatus:
+    for p in pilotOrdering():
         rownbr+=1
         elem=PilotsStatus[p]
         addLineInTable(rownbr, p, elem)
