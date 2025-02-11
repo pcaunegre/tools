@@ -164,6 +164,7 @@ def parseData(infolist):
     for p in PilotsStatus:
         (pilot,al) = checkPilot(PilotsStatus[p])
         PilotsStatus[p] = pilot
+        if al: printlog("ALARM ! Pilot "+p+" "+pilot['Name']+" "+pilot['Surname'])
         alarm += al
 
     # save infos in backup file
@@ -310,25 +311,39 @@ def updatePilotInfo(ps,cur):
 
 
 # -----------------------------------------------
-# check a pilot 
+# check a pilot (monitors status, log delay...)
+# evaluate pilot or log time warnings            
 # 
 # -----------------------------------------------
 def checkPilot(ps):
 
-
     alarm = 0
-    # evaluate pilot or log time warnings            
-    (STtext,STcolor,DTval,DTcolor) = calcStatus(ps)
+    ps['STtext'] = '-'
+    ps['STcolor'] = defaultbg
+    if ps['TakeOff']:
+        ps['STtext']  = 'En vol'
+        ps['STcolor'] = 'green'
+    
+    if (ps['TakeOff'] and ps['Landed'] and (not ps['Cleared'])):
+        ps['STtext']  = 'ALERT'
+        ps['STcolor'] = 'red'
+    
+    if ps['Cleared']:
+        ps['STtext']  = 'Safe'
+        ps['STcolor'] = defaultbg
+
+    # delta time between now and last log
+    now = int(time.time())  
+    deltat = now-int(ps['last_postime'])
+    ps['DTlog'] = deltat
+    if (deltat > int(getParam('delaiLogMax'))): 
+        ps['DTcolor'] = 'yellow'
+    else:    
+        ps['DTcolor'] = defaultbg
 
     # pilot landed but not cleared
     if (ps['Landed'] and ps['Cleared']==0):
-        printlog("ALARM ! Pilot "+cur['pseudo'])
         alarm = 1
-
-    ps.update({  "DTlog": DTval,\
-                 "DTcolor": DTcolor,\
-                 "STtext": STtext,\
-                 "STcolor": STcolor })
 
     return((ps,alarm))       
 
@@ -420,32 +435,32 @@ def savePilotTable():
     
         
         
-# -----------------------------------------------
-# Calculate status
-# -----------------------------------------------
-def calcStatus(elem):
-
-    print("Calc")
-    print(elem)
-    status = '-'
-    color = defaultbg         # default color #d9d9d9
-    if elem['TakeOff']:
-        status='En vol'
-        color='green'
-    if (elem['TakeOff'] and elem['Landed'] and (not elem['Cleared'])):
-        status='ALERT'
-        color='red'
-    if elem['Cleared']:
-        status='Safe'
-        color=defaultbg
-
-    # delta time between now and last log
-    now = int(time.time())  
-    deltat = now-int(elem['last_postime'])
-    color2 = defaultbg
-    if (deltat > int(getParam('delaiLogMax'))): color2="yellow"
-    
-    return((status,color,deltat,color2))
+# # # -----------------------------------------------
+# # # Calculate status
+# # # -----------------------------------------------
+# # def calcStatus(elem):
+# # 
+# #     print("Calc")
+# #     print(elem)
+# #     status = '-'
+# #     color = defaultbg         # default color #d9d9d9
+# #     if elem['TakeOff']:
+# #         status='En vol'
+# #         color='green'
+# #     if (elem['TakeOff'] and elem['Landed'] and (not elem['Cleared'])):
+# #         status='ALERT'
+# #         color='red'
+# #     if elem['Cleared']:
+# #         status='Safe'
+# #         color=defaultbg
+# # 
+# #     # delta time between now and last log
+# #     now = int(time.time())  
+# #     deltat = now-int(elem['last_postime'])
+# #     color2 = defaultbg
+# #     if (deltat > int(getParam('delaiLogMax'))): color2="yellow"
+# #     
+# #     return((status,color,deltat,color2))
 
 
 # -----------------------------------------------
@@ -465,10 +480,15 @@ def clearPilotStatus(p):
     else:
         if elem['Landed']: elem['Cleared']=1
         else: elem['Landed']=1
-    
+
+    # now reevaluate status and store
+    (elem,al)=checkPilot(elem)
     PilotsStatus[p]=elem
-    updatePilotTable()
     savePilotTable()
+    
+    # refresh display
+    refreshPilotLine(p)
+    # updatePilotTable()
         
 # -----------------------------------------------
 # locate pilot on map
@@ -479,7 +499,7 @@ def locatePilot(p):
     
     lat = PilotsStatus[p]['last_lat']
     lon = PilotsStatus[p]['last_lon']
-    url = "https://www.spotair.mobi/?lat="+str(lat)+"&lng="+str(lon)+"&zoom=15&ltffvl"
+    url = "https://www.spotair.mobi/?lat="+str(lat)+"&lng="+str(lon)+"&zoom=15&layers=ltffvl"
     command = 'firefox  --new-window \"'+url+'\" &'
     printlog(command)    
     os.system(command)
@@ -766,6 +786,29 @@ def resetPilotStatus ():
     
     PilotsStatus = {}
     savePilotTable()  
+
+
+# ------------------------------------------------------------------------------
+# orders the list of ID wrt to criteria (alert first, alphabetic...)
+# ------------------------------------------------------------------------------
+def pilotOrdering():   
+
+    global PilotsStatus
+    
+    alertlist = list()
+    warnlist = list()
+    traillist = list()
+    
+    for p in PilotsStatus:
+        item = PilotsStatus[p]
+        if item['STtext'] == "ALERT":
+            alertlist.append(p)
+        elif item['DTcolor'] == "yellow":
+            warnlist.append(p)
+        else:
+            traillist.append(p)
+    
+    return(alertlist+warnlist+traillist)
     
     
        
@@ -892,27 +935,6 @@ def createPilotsPanel(nb):
     
     createPilotTable(canv)
     
-# ------------------------------------------------------------------------------
-# orders the list of ID wrt to criteria (alert first, alphabetic...)
-# ------------------------------------------------------------------------------
-def pilotOrdering():   
-
-    global PilotsStatus
-    
-    alertlist = list()
-    warnlist = list()
-    traillist = list()
-    
-    for p in PilotsStatus:
-        item = PilotsStatus[p]
-        if item['STtext'] == "ALERT":
-            alertlist.append(p)
-        elif item['DTcolor'] == "yellow":
-            warnlist.append(p)
-        else:
-            traillist.append(p)
-    
-    return(alertlist+warnlist+traillist)
 
 
 # ------------------------------------------------------------------------------
@@ -952,6 +974,10 @@ def createPilotTable(parent):
         addLineInTable(rownbr, p, elem)
     widgets['panel']['rownb'] = rownbr    
 
+    horl = datetime.now()
+    dt_string = horl.strftime("%H:%M:%S")
+    widgets['dateLabel'].configure(text=dt_string)
+
     
 # -----------------------------------------------
 # Create line of the table
@@ -978,38 +1004,68 @@ def addLineInTable(rownbr, p, elem):
     Cell(f, x=9,y=rownbr, w=10, wtype="clearb",defval="Clear/Undo",pid=p, options=optionsC, bgc=defaultbg ) 
     Cell(f, x=10,y=rownbr, w=10, wtype="locb",defval="Voir",pid=p, options=optionsC, bgc=defaultbg ) 
 
+
+
 # -----------------------------------------------
 # table update
 # -----------------------------------------------
 def updatePilotTable():   
-    
-    global PilotsStatus
-    
-    horl = datetime.now()
-    dt_string = horl.strftime("%H:%M:%S")
-    widgets['dateLabel'].configure(text=dt_string)
 
-    for p in PilotsStatus:
-        elem=PilotsStatus[p]
-        
-        if p in widgets['pilotStat']:
-            # update existing line in the table
-            widgets['pilotStat'][p].sv.set(elem['STtext'])             # change the content of this widget
-            widgets['pilotStat'][p].entry.configure(bg=elem['STcolor'])   # change the color of this widget
-            widgets['pilotRTim'][p].sv.set(elem['DTlog'])
-            widgets['pilotRTim'][p].entry.configure(bg=elem['DTcolor'])
-            widgets['pilotAlt'][p].sv.set(elem['last_alt'])
-            widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
-            widgets['pilotStep'][p].sv.set(elem['last_dist'])
-            widgets['pilotDist'][p].sv.set(elem['d2atter'])
-        else:   
-            # add a new line in the table
-            rownbr = widgets['panel']['rownb']+1
-            widgets['panel']['rownb'] = rownbr
-            addLineInTable(rownbr, p, elem)
+    # first destroy
+    widgets['panel']['pilot'].destroy()
+    
+    # rebuild
+    createPilotTable(widgets['canvas'])
 
-    maxscroll=widgets['panel']['rownb']*30
-    widgets['canvas'].configure(scrollregion=(0, 0, 600, maxscroll))
+
+# -----------------------------------------------
+# refresh infos on a line of the table
+# -----------------------------------------------
+def refreshPilotLine(p):   
+    
+    elem=PilotsStatus[p]
+    widgets['pilotStat'][p].sv.set(elem['STtext'])             # change the content of this widget
+    widgets['pilotStat'][p].entry.configure(bg=elem['STcolor'])   # change the color of this widget
+    widgets['pilotRTim'][p].sv.set(elem['DTlog'])
+    widgets['pilotRTim'][p].entry.configure(bg=elem['DTcolor'])
+    widgets['pilotAlt'][p].sv.set(elem['last_alt'])
+    widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
+    widgets['pilotStep'][p].sv.set(elem['last_dist'])
+    widgets['pilotDist'][p].sv.set(elem['d2atter'])
+
+
+# # -----------------------------------------------
+# # table update
+# # -----------------------------------------------
+# def updatePilotTable():   
+#     
+#     global PilotsStatus
+#     
+#     horl = datetime.now()
+#     dt_string = horl.strftime("%H:%M:%S")
+#     widgets['dateLabel'].configure(text=dt_string)
+# 
+#     for p in PilotsStatus:
+#         elem=PilotsStatus[p]
+#         
+#         if p in widgets['pilotStat']:
+#             # update existing line in the table
+#             widgets['pilotStat'][p].sv.set(elem['STtext'])             # change the content of this widget
+#             widgets['pilotStat'][p].entry.configure(bg=elem['STcolor'])   # change the color of this widget
+#             widgets['pilotRTim'][p].sv.set(elem['DTlog'])
+#             widgets['pilotRTim'][p].entry.configure(bg=elem['DTcolor'])
+#             widgets['pilotAlt'][p].sv.set(elem['last_alt'])
+#             widgets['pilotHs'][p].sv.set(elem['last_h_speed'])
+#             widgets['pilotStep'][p].sv.set(elem['last_dist'])
+#             widgets['pilotDist'][p].sv.set(elem['d2atter'])
+#         else:   
+#             # add a new line in the table
+#             rownbr = widgets['panel']['rownb']+1
+#             widgets['panel']['rownb'] = rownbr
+#             addLineInTable(rownbr, p, elem)
+# 
+#     maxscroll=widgets['panel']['rownb']*30
+#     widgets['canvas'].configure(scrollregion=(0, 0, 600, maxscroll))
         
 # ------------------------------------------------------------------------------
 # OPTIONS PANEL
